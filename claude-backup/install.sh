@@ -34,13 +34,38 @@ else
   echo "[warn] jq 不在。settings.snippet.json を手動で $SETTINGS にマージしてください"
 fi
 
-# 3) 日次スケジュール(保険)。cron があれば登録、無ければ手順を案内
-if command -v crontab >/dev/null 2>&1; then
+# 3) 日次スケジュール(保険)。macOS は launchd、その他は cron。
+OS="$(uname -s)"
+if [ "$OS" = "Darwin" ]; then
+  # macOS: cron は非推奨(Full Disk Access が必要)なので launchd を使う
+  PLIST="$HOME/Library/LaunchAgents/com.claude.backup.plist"
+  mkdir -p "$HOME/Library/LaunchAgents"
+  cat >"$PLIST" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.claude.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$HOME/.claude/backup/run-backup.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardErrorPath</key><string>$HOME/.claude/backup/launchd.log</string>
+  <key>StandardOutPath</key><string>$HOME/.claude/backup/launchd.log</string>
+</dict>
+</plist>
+PLIST_EOF
+  launchctl unload "$PLIST" 2>/dev/null || true
+  launchctl load "$PLIST" 2>/dev/null && echo "[ok] launchd 登録(毎日 09:30): $PLIST" \
+    || echo "[warn] launchctl load 失敗。$PLIST を手動で読み込んでください"
+elif command -v crontab >/dev/null 2>&1; then
   LINE="30 9 * * * $HOME/.claude/backup/run-backup.sh >/dev/null 2>&1"
   ( crontab -l 2>/dev/null | grep -v 'claude/backup/run-backup.sh' ; echo "$LINE" ) | crontab -
   echo "[ok] 日次 cron 登録(毎日 09:30)"
 else
-  echo "[info] cron 不在。macOS は launchd、Win は タスクスケジューラで"
+  echo "[info] cron 不在。Windows は タスクスケジューラで"
   echo "       毎日 ~/.claude/backup/run-backup.sh を実行する設定を追加してください"
 fi
 
