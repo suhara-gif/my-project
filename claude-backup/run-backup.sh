@@ -81,16 +81,24 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 WORK="$(mktemp -d)"
 ARCHIVE="$WORK/claude-backup-$STAMP.tar.gz"
 
-# 除外: トークン/認証情報、巨大で再現可能なキャッシュ類、ロック・ログ
+# 除外: トークン/認証情報、再生成可能で巨大な領域(プラグイン・キャッシュ・
+# シェルスナップショット・テレメトリ)、ロック・ログ。BSD/GNU 両対応の単純パターン。
+# CLAUDE_BACKUP_EXTRA_EXCLUDES に空白区切りで追加除外パターンを渡せる。
+EXTRA_EXCLUDES="${CLAUDE_BACKUP_EXTRA_EXCLUDES:-}"
+# shellcheck disable=SC2086  # EXTRA_EXCLUDES は意図的に単語分割する
 tar czf "$ARCHIVE" \
   --exclude='.claude.json' \
   --exclude='*token*' \
   --exclude='*credential*' \
   --exclude='*.key' \
-  --exclude='backup/.lock' \
-  --exclude='backup/backup.log' \
-  --exclude='**/cache/**' \
-  --exclude='**/node_modules/**' \
+  --exclude='*/backup/.lock' \
+  --exclude='*/backup/backup.log' \
+  --exclude='*/cache/*' \
+  --exclude='*/node_modules/*' \
+  --exclude='*/plugins/*' \
+  --exclude='*/statsig/*' \
+  --exclude='*/shell-snapshots/*' \
+  $EXTRA_EXCLUDES \
   -C "$(dirname "$SRC_DIR")" "$(basename "$SRC_DIR")"
 
 # ---- 任意: age で暗号化 ---------------------------------------------------
@@ -120,25 +128,38 @@ fi
 ALLOWED="mcp__${NOTION_MCP},mcp__${DEST_MCP},Read"
 
 if command -v claude >/dev/null 2>&1; then
-  PROMPT=$(cat <<EOF
+  DIFF_TEXT="${DIFF:-（差分なし／初回）}"
+  # 静的テンプレ(クォート付き heredoc = 一切展開しない)を作り、プレースホルダを
+  # ${//} で安全に置換する。置換値は再展開されないため、ファイルパス等に $ や
+  # $(...) が含まれていても set -u クラッシュやコマンド注入が起きない。
+  TEMPLATE=$(cat <<'EOF'
 あなたはバックアップ実行エージェントです。次を順に実行してください。
-1. ローカルファイル「$UPLOAD」を $DEST_LABEL の「$DEST_FOLDER」フォルダにアップロードする。
+1. ローカルファイル「@@UPLOAD@@」を @@DEST_LABEL@@ の「@@DEST_FOLDER@@」フォルダにアップロードする。
    フォルダが無ければ作成する。アップロード後の共有/参照リンクを取得する。
-2. Notion の台帳データベース($NOTION_LEDGER_URL があればそれを、無ければ
-   名前「$NOTION_LEDGER」で検索)を開く。見つからなければ作成する
+2. Notion の台帳データベース(@@LEDGER_URL@@ があればそれを、無ければ
+   名前「@@LEDGER@@」で検索)を開く。見つからなければ作成する
    (プロパティ: エントリ=title, 日時=date, 種別=select[フルバックアップ/設定変更/
     スケジュール変更], 変更サマリ=rich_text, 変更ファイル=rich_text,
     アーカイブリンク=url, サイズ=rich_text, 状態=select[成功/失敗])。
 3. 下記の差分を読み、人間が読める変更サマリと種別を判定する。
    --- 前回からのファイル差分 ---
-   ${DIFF:-（差分なし／初回）}
+   @@DIFF@@
    --- ここまで ---
-4. 台帳に1行追加する: エントリ=「バックアップ $STAMP」、日時=今、種別=判定結果、
+4. 台帳に1行追加する: エントリ=「バックアップ @@STAMP@@」、日時=今、種別=判定結果、
    変更サマリ=要約、変更ファイル=差分の対象、アーカイブリンク=手順1のリンク、
-   サイズ=$SIZE、状態=成功。
+   サイズ=@@SIZE@@、状態=成功。
 失敗した場合は状態=失敗で記録し、理由を変更サマリに書く。簡潔に。
 EOF
 )
+  PROMPT=$TEMPLATE
+  PROMPT=${PROMPT//@@UPLOAD@@/$UPLOAD}
+  PROMPT=${PROMPT//@@DEST_LABEL@@/$DEST_LABEL}
+  PROMPT=${PROMPT//@@DEST_FOLDER@@/$DEST_FOLDER}
+  PROMPT=${PROMPT//@@LEDGER_URL@@/$NOTION_LEDGER_URL}
+  PROMPT=${PROMPT//@@LEDGER@@/$NOTION_LEDGER}
+  PROMPT=${PROMPT//@@STAMP@@/$STAMP}
+  PROMPT=${PROMPT//@@SIZE@@/$SIZE}
+  PROMPT=${PROMPT//@@DIFF@@/$DIFF_TEXT}
   # CLAUDE_BACKUP_RUNNING=1 を子に渡し、子セッションの SessionEnd で再帰しないようにする
   if CLAUDE_BACKUP_RUNNING=1 claude -p "$PROMPT" \
         --allowedTools "$ALLOWED" \
