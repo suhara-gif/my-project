@@ -64,6 +64,18 @@ git clone <this-repo> && cd <this-repo>/claude-backup
 | `CLAUDE_BACKUP_AGE_RECIPIENT` | (空) | 設定すると age 暗号化を有効化 |
 | `CLAUDE_BACKUP_MIN_INTERVAL` | `1800` | 連発時にスキップする最小間隔(秒) |
 | `CLAUDE_BACKUP_RETAIN_LOCAL` | `5` | ローカルに残す世代数 |
+| `CLAUDE_BACKUP_NOTION_MCP` | `Notion` | Notion の MCP サーバー名(`claude mcp list` の表示名) |
+| `CLAUDE_BACKUP_DRIVE_MCP` | `Google Drive` | Google Drive の MCP サーバー名 |
+| `CLAUDE_BACKUP_BOX_MCP` | `Box` | Box の MCP サーバー名 |
+
+> MCP サーバー名は `claude mcp list` の表示名に一致させること。`--allowedTools` の
+> プレフィックス照合に使われるため、名前が違うとアップロード/台帳記録が拒否される。
+
+## 対応プラットフォーム
+
+macOS(BSD userland / 標準 bash 3.2)と Linux(GNU)の両対応。`flock` / `mapfile` /
+`date -Is` といった GNU・bash4 専用機能は使っていない。日次スケジュールは
+**macOS では launchd**、それ以外では cron を `install.sh` が自動登録する。
 
 ## Notion 台帳のスキーマ
 
