@@ -127,6 +127,7 @@ cp "$CUR_MANIFEST" "$PREV_MANIFEST"
 date +%s >"$LAST_FILE"
 
 # STATE_DIR に退避したローカルアーカイブを RETAIN_LOCAL 世代まで
+# shellcheck disable=SC2012  # ファイル名は制御されたタイムスタンプで、mtime順(-t)が必要
 mapfile -t old < <(ls -1t "$STATE_DIR"/claude-backup-*.tar.gz* 2>/dev/null | tail -n +"$((RETAIN_LOCAL + 1))")
 for f in "${old[@]:-}"; do [[ -n "$f" ]] && rm -f "$f" && log "[info] 古いローカル世代を削除: $(basename "$f")"; done
 
