@@ -21,6 +21,13 @@ if [ -n "${CLAUDE_BACKUP_RUNNING:-}" ]; then
   exit 0
 fi
 
+# ---- 設定ファイル読み込み -------------------------------------------------
+# SessionEnd フックも launchd/cron も、シェルの ~/.zshrc 等を読まない。両方で
+# 環境変数を効かせるため、設定ファイル(KEY=VALUE 形式)があればここで読み込む。
+CONFIG_FILE="${CLAUDE_BACKUP_CONFIG:-$HOME/.claude/backup/config}"
+# shellcheck disable=SC1090  # ユーザー設定ファイルのパスは可変
+[ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
+
 # ---- 設定(環境変数で上書き可) -------------------------------------------
 SRC_DIR="${CLAUDE_BACKUP_SRC:-$HOME/.claude}"
 STATE_DIR="${CLAUDE_BACKUP_STATE:-$HOME/.claude/backup}"

@@ -19,6 +19,29 @@ cp "$HERE/run-backup.sh" "$HERE/restore.sh" "$DEST/"
 chmod +x "$DEST/run-backup.sh" "$DEST/restore.sh"
 echo "[ok] スクリプト配置: $DEST"
 
+# 1.5) 設定ファイルの雛形(無ければ作成)。hook/launchd 双方で環境変数を効かせる。
+CONFIG="$DEST/config"
+if [ ! -f "$CONFIG" ]; then
+  cat >"$CONFIG" <<'CONFIG_EOF'
+# Claude バックアップ設定 (KEY=VALUE)。run-backup.sh が起動時に読み込む。
+# クラウド転送先は下記のどちらか一方を有効化してください。
+
+# 方式A(推奨・追加ツール不要): Google Drive / Box デスクトップ同期フォルダへ cp
+# macOS の Google Drive 例(<email> は自分のものに置換):
+# CLAUDE_BACKUP_LOCAL_SYNC_DIR="$HOME/Library/CloudStorage/GoogleDrive-<email>/My Drive"
+
+# 方式B: rclone(rclone config で remote を作成後、その名前を指定)
+# CLAUDE_BACKUP_RCLONE_REMOTE="gdrive"
+
+# 任意設定:
+# CLAUDE_BACKUP_DEST_FOLDER="ClaudeBackups"
+# CLAUDE_BACKUP_AGE_RECIPIENT="age1..."     # 暗号化を有効化
+CONFIG_EOF
+  echo "[ok] 設定雛形を作成: $CONFIG (転送先を有効化してください)"
+else
+  echo "[info] 既存の設定を保持: $CONFIG"
+fi
+
 # 2) settings.json に SessionEnd フックをマージ
 if command -v jq >/dev/null 2>&1; then
   tmp="$(mktemp)"
