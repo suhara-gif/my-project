@@ -67,7 +67,10 @@ git clone <this-repo> && cd <this-repo>/claude-backup
 
 ## Notion 台帳のスキーマ
 
-初回実行時、なければ自動作成されます(`claude -p` 経由)。
+台帳DBは**作成済み**です: [Claudeバックアップ台帳](https://app.notion.com/p/3a76063ad84541f5b0323508e3b2ee05)
+(フォーマット確認用のサンプル行が1件入っています。確認後は削除可)。
+`run-backup.sh` は既定でこのDBに追記します。別DBにしたい場合は
+`CLAUDE_BACKUP_NOTION_LEDGER_URL` を上書き、空にすると名前検索/自動作成にフォールバックします。
 
 | プロパティ | 型 | 例 |
 |---|---|---|
