@@ -25,12 +25,9 @@ fi
 SRC_DIR="${CLAUDE_BACKUP_SRC:-$HOME/.claude}"
 STATE_DIR="${CLAUDE_BACKUP_STATE:-$HOME/.claude/backup}"
 RETAIN_LOCAL="${CLAUDE_BACKUP_RETAIN_LOCAL:-5}"     # ローカルに残すアーカイブ世代数
-DEST="${CLAUDE_BACKUP_DEST:-googledrive}"           # googledrive | box
 DEST_FOLDER="${CLAUDE_BACKUP_DEST_FOLDER:-ClaudeBackups}"
-# MCP サーバー名(`claude mcp list` の表示名に合わせる)
+# Notion MCP サーバー名(`claude mcp list` の表示名に合わせる)。台帳記録に使用。
 NOTION_MCP="${CLAUDE_BACKUP_NOTION_MCP:-Notion}"
-DRIVE_MCP="${CLAUDE_BACKUP_DRIVE_MCP:-Google Drive}"
-BOX_MCP="${CLAUDE_BACKUP_BOX_MCP:-Box}"
 NOTION_LEDGER="${CLAUDE_BACKUP_NOTION_LEDGER:-Claudeバックアップ台帳}"
 # 作成済み台帳DBのURL(空なら名前で検索/無ければ新規作成)
 NOTION_LEDGER_URL="${CLAUDE_BACKUP_NOTION_LEDGER_URL:-https://app.notion.com/p/3a76063ad84541f5b0323508e3b2ee05}"
@@ -112,66 +109,92 @@ fi
 SIZE="$(du -h "$UPLOAD" | cut -f1 | tr -d '[:space:]')"
 log "[info] アーカイブ作成: $(basename "$UPLOAD") ($SIZE)"
 
-# ---- ② Claude に判定・アップロード・台帳記録を委譲 ------------------------
-# claude が無い/失敗してもローカルアーカイブは残るのでデータは失われない。
+# ---- ② バイナリアップロード(決定的・LLM非依存) --------------------------
+# 実ファイル転送は専用手段で行う。MCP/LLM はバイナリ非対応のため使わない。
+#   優先1) CLAUDE_BACKUP_LOCAL_SYNC_DIR → そこへ cp(Google Drive/Box の
+#          デスクトップ同期フォルダを指せば自動でクラウド同期。追加ツール不要)
+#   優先2) rclone + CLAUDE_BACKUP_RCLONE_REMOTE → rclone copy でリモートへ転送
+#   どちらも無ければローカル保持のみ(データは失わない)+ 設定を促す警告
+LOCAL_SYNC_DIR="${CLAUDE_BACKUP_LOCAL_SYNC_DIR:-}"
+RCLONE_REMOTE="${CLAUDE_BACKUP_RCLONE_REMOTE:-}"
+BASENAME="$(basename "$UPLOAD")"
+UPLOAD_LINK=""
+UPLOAD_OK=0
+
+if [ -n "$LOCAL_SYNC_DIR" ]; then
+  if mkdir -p "$LOCAL_SYNC_DIR/$DEST_FOLDER" && cp "$UPLOAD" "$LOCAL_SYNC_DIR/$DEST_FOLDER/"; then
+    UPLOAD_OK=1
+    UPLOAD_LINK="$LOCAL_SYNC_DIR/$DEST_FOLDER/$BASENAME"
+    log "[ok] 同期フォルダへ配置(自動クラウド同期): $UPLOAD_LINK"
+  else
+    log "[warn] 同期フォルダへのコピー失敗: $LOCAL_SYNC_DIR"
+  fi
+elif [ -n "$RCLONE_REMOTE" ] && command -v rclone >/dev/null 2>&1; then
+  if rclone copy "$UPLOAD" "${RCLONE_REMOTE}:${DEST_FOLDER}/" >>"$LOG_FILE" 2>&1; then
+    UPLOAD_OK=1
+    UPLOAD_LINK="$(rclone link "${RCLONE_REMOTE}:${DEST_FOLDER}/${BASENAME}" 2>/dev/null || true)"
+    [ -z "$UPLOAD_LINK" ] && UPLOAD_LINK="${RCLONE_REMOTE}:${DEST_FOLDER}/${BASENAME}"
+    log "[ok] rclone でアップロード: $UPLOAD_LINK"
+  else
+    log "[warn] rclone アップロード失敗 (remote=$RCLONE_REMOTE)"
+  fi
+else
+  log "[warn] クラウド転送手段が未設定。CLAUDE_BACKUP_LOCAL_SYNC_DIR か rclone を設定してください"
+fi
+
+# クラウド転送できなければローカル世代へ必ず退避(データ保全)
+if [ "$UPLOAD_OK" -eq 0 ]; then
+  cp "$UPLOAD" "$STATE_DIR/"
+  UPLOAD_LINK="(ローカルのみ) $STATE_DIR/$BASENAME"
+fi
+
+# ---- ③ Notion 台帳へ記録(テキストのみ。MCP が得意な領域) -----------------
 PREV_MANIFEST="$STATE_DIR/last-manifest.txt"
 CUR_MANIFEST="$WORK/manifest.txt"
 tar tzf "$ARCHIVE" | sort >"$CUR_MANIFEST"
 DIFF="$(diff "$PREV_MANIFEST" "$CUR_MANIFEST" 2>/dev/null || true)"
-
-# 保存先に応じた MCP サーバー名とラベル
-if [ "$DEST" = "box" ]; then
-  DEST_MCP="$BOX_MCP"; DEST_LABEL="Box"
-else
-  DEST_MCP="$DRIVE_MCP"; DEST_LABEL="Google Drive"
-fi
-ALLOWED="mcp__${NOTION_MCP},mcp__${DEST_MCP},Read"
+STATUS_TEXT="成功"
+[ "$UPLOAD_OK" -eq 0 ] && STATUS_TEXT="失敗(クラウド未転送・ローカル保持のみ)"
 
 if command -v claude >/dev/null 2>&1; then
   DIFF_TEXT="${DIFF:-（差分なし／初回）}"
-  # 静的テンプレ(クォート付き heredoc = 一切展開しない)を作り、プレースホルダを
-  # ${//} で安全に置換する。置換値は再展開されないため、ファイルパス等に $ や
-  # $(...) が含まれていても set -u クラッシュやコマンド注入が起きない。
+  # 静的テンプレ(クォート付き heredoc = 一切展開しない)+ ${//} 安全置換。
+  # 置換値は再展開されないため $ や $(...) を含んでも set -u クラッシュ/注入なし。
   TEMPLATE=$(cat <<'EOF'
-あなたはバックアップ実行エージェントです。次を順に実行してください。
-1. ローカルファイル「@@UPLOAD@@」を @@DEST_LABEL@@ の「@@DEST_FOLDER@@」フォルダにアップロードする。
-   フォルダが無ければ作成する。アップロード後の共有/参照リンクを取得する。
-2. Notion の台帳データベース(@@LEDGER_URL@@ があればそれを、無ければ
+あなたはバックアップ台帳の記録係です。ファイルのアップロードは済んでいるので
+記録のみ行ってください(アップロードはしない)。
+1. Notion の台帳データベース(@@LEDGER_URL@@ があればそれを、無ければ
    名前「@@LEDGER@@」で検索)を開く。見つからなければ作成する
    (プロパティ: エントリ=title, 日時=date, 種別=select[フルバックアップ/設定変更/
     スケジュール変更], 変更サマリ=rich_text, 変更ファイル=rich_text,
     アーカイブリンク=url, サイズ=rich_text, 状態=select[成功/失敗])。
-3. 下記の差分を読み、人間が読める変更サマリと種別を判定する。
+2. 下記の差分を読み、人間が読める変更サマリと種別を判定する。
    --- 前回からのファイル差分 ---
    @@DIFF@@
    --- ここまで ---
-4. 台帳に1行追加する: エントリ=「バックアップ @@STAMP@@」、日時=今、種別=判定結果、
-   変更サマリ=要約、変更ファイル=差分の対象、アーカイブリンク=手順1のリンク、
-   サイズ=@@SIZE@@、状態=成功。
-失敗した場合は状態=失敗で記録し、理由を変更サマリに書く。簡潔に。
+3. 台帳に1行追加する: エントリ=「バックアップ @@STAMP@@」、日時=今、種別=判定結果、
+   変更サマリ=要約、変更ファイル=差分の対象、アーカイブリンク=「@@LINK@@」、
+   サイズ=@@SIZE@@、状態=@@STATUS@@。簡潔に。
 EOF
 )
   PROMPT=$TEMPLATE
-  PROMPT=${PROMPT//@@UPLOAD@@/$UPLOAD}
-  PROMPT=${PROMPT//@@DEST_LABEL@@/$DEST_LABEL}
-  PROMPT=${PROMPT//@@DEST_FOLDER@@/$DEST_FOLDER}
   PROMPT=${PROMPT//@@LEDGER_URL@@/$NOTION_LEDGER_URL}
   PROMPT=${PROMPT//@@LEDGER@@/$NOTION_LEDGER}
   PROMPT=${PROMPT//@@STAMP@@/$STAMP}
   PROMPT=${PROMPT//@@SIZE@@/$SIZE}
+  PROMPT=${PROMPT//@@LINK@@/$UPLOAD_LINK}
+  PROMPT=${PROMPT//@@STATUS@@/$STATUS_TEXT}
   PROMPT=${PROMPT//@@DIFF@@/$DIFF_TEXT}
   # CLAUDE_BACKUP_RUNNING=1 を子に渡し、子セッションの SessionEnd で再帰しないようにする
   if CLAUDE_BACKUP_RUNNING=1 claude -p "$PROMPT" \
-        --allowedTools "$ALLOWED" \
+        --allowedTools "mcp__${NOTION_MCP}" \
         >>"$LOG_FILE" 2>&1; then
-    log "[ok] アップロード&台帳記録 完了"
+    log "[ok] Notion 台帳に記録 ($STATUS_TEXT)"
   else
-    log "[warn] Claude 経由の退避/記録に失敗。ローカルアーカイブは保持: $UPLOAD"
-    cp "$UPLOAD" "$STATE_DIR/"   # 最低限ローカルに退避
+    log "[warn] Notion 台帳への記録に失敗。アーカイブは保全済み: $UPLOAD_LINK"
   fi
 else
-  log "[warn] claude CLI 不在。ローカルアーカイブのみ保持"
-  cp "$UPLOAD" "$STATE_DIR/"
+  log "[info] claude CLI 不在。台帳記録はスキップ(アーカイブは保全済み: $UPLOAD_LINK)"
 fi
 
 # ---- 後始末: マニフェスト更新・ローカル世代数の制限・実行時刻記録 --------

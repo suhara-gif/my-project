@@ -25,10 +25,22 @@ PCクラッシュ対策にはならない)。クラウドの Routine だけは A
      台帳(履歴)    → Notion DB「Claudeバックアップ台帳」
 ```
 
-- **確実にやるべき固め+秘密情報の除外**はシェル(`run-backup.sh`)で機械的に。
-- **差分判定・要約・アップロード先振り分け・台帳記録**は Claude + MCP で知的に。
+- **固め+秘密情報の除外+クラウド転送**はシェル(`run-backup.sh`)で機械的に。
+- **差分判定・要約・台帳記録**だけを Claude + Notion MCP で知的に。
+- **バイナリ転送は LLM/MCP に任せない**。MCP コネクタはバイナリ非対応なので、
+  実ファイルは「デスクトップ同期フォルダへの cp」か「rclone」で確実に転送する。
 - **秘密情報**(`~/.claude.json` の OAuth トークン等)は**アーカイブから除外**。
   任意で `age` 暗号化も可能。復元後は `claude login` で再認証する。
+
+### クラウド転送の2方式(どちらか一方を設定)
+
+| 方式 | 設定 | 向き |
+|---|---|---|
+| **同期フォルダへ cp**(推奨・追加ツール不要) | `CLAUDE_BACKUP_LOCAL_SYNC_DIR` に Google Drive / Box デスクトップアプリの同期フォルダを指定 | Drive/Box デスクトップアプリを使っている人 |
+| **rclone** | `rclone config` で remote を作成し `CLAUDE_BACKUP_RCLONE_REMOTE` に remote 名を指定 | デスクトップアプリ無しでCLI転送したい人 |
+
+どちらも未設定なら、アーカイブはローカル(`~/.claude/backup/`)に世代保持され、
+Notion 台帳には「失敗(クラウド未転送・ローカル保持のみ)」と記録される(データは失わない)。
 
 ## 構成ファイル
 
@@ -58,18 +70,19 @@ git clone <this-repo> && cd <this-repo>/claude-backup
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
-| `CLAUDE_BACKUP_DEST` | `googledrive` | `googledrive` または `box` |
-| `CLAUDE_BACKUP_DEST_FOLDER` | `ClaudeBackups` | 保存先フォルダ名 |
+| `CLAUDE_BACKUP_LOCAL_SYNC_DIR` | (空) | Drive/Box 同期フォルダのパス。設定するとそこへ cp(推奨) |
+| `CLAUDE_BACKUP_RCLONE_REMOTE` | (空) | rclone の remote 名。同期フォルダ未設定時に使用 |
+| `CLAUDE_BACKUP_DEST_FOLDER` | `ClaudeBackups` | 保存先サブフォルダ名 |
 | `CLAUDE_BACKUP_NOTION_LEDGER` | `Claudeバックアップ台帳` | Notion 台帳DB名 |
+| `CLAUDE_BACKUP_NOTION_MCP` | `Notion` | Notion の MCP サーバー名(`claude mcp list` の表示名) |
 | `CLAUDE_BACKUP_AGE_RECIPIENT` | (空) | 設定すると age 暗号化を有効化 |
 | `CLAUDE_BACKUP_MIN_INTERVAL` | `1800` | 連発時にスキップする最小間隔(秒) |
 | `CLAUDE_BACKUP_RETAIN_LOCAL` | `5` | ローカルに残す世代数 |
-| `CLAUDE_BACKUP_NOTION_MCP` | `Notion` | Notion の MCP サーバー名(`claude mcp list` の表示名) |
-| `CLAUDE_BACKUP_DRIVE_MCP` | `Google Drive` | Google Drive の MCP サーバー名 |
-| `CLAUDE_BACKUP_BOX_MCP` | `Box` | Box の MCP サーバー名 |
+| `CLAUDE_BACKUP_EXTRA_EXCLUDES` | (空) | tar の追加除外パターン(空白区切り) |
 
-> MCP サーバー名は `claude mcp list` の表示名に一致させること。`--allowedTools` の
-> プレフィックス照合に使われるため、名前が違うとアップロード/台帳記録が拒否される。
+> Notion MCP サーバー名は `claude mcp list` の表示名に一致させること(台帳記録の
+> `--allowedTools` 照合に使用)。**実ファイルのアップロードに MCP は使わない**
+> (バイナリ非対応のため)。転送は同期フォルダ cp か rclone で行う。
 
 ## 対応プラットフォーム
 
