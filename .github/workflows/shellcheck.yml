@@ -1,0 +1,22 @@
+name: shellcheck
+
+on:
+  pull_request:
+    paths:
+      - 'claude-backup/**.sh'
+      - '.github/workflows/shellcheck.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'claude-backup/**.sh'
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          shellcheck claude-backup/*.sh

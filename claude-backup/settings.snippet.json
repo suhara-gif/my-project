@@ -1,0 +1,15 @@
+{
+  "_comment": "この snippet を ローカルの ~/.claude/settings.json にマージしてください(丸ごとコピーせず hooks ブロックを統合)。SessionEnd でセッション終了ごとに run-backup.sh が自動発火します。run-backup.sh 側に最小実行間隔(既定30分)があるので連発しても無駄打ちしません。",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/backup/run-backup.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
