@@ -33,6 +33,9 @@ SRC_DIR="${CLAUDE_BACKUP_SRC:-$HOME/.claude}"
 STATE_DIR="${CLAUDE_BACKUP_STATE:-$HOME/.claude/backup}"
 RETAIN_LOCAL="${CLAUDE_BACKUP_RETAIN_LOCAL:-5}"     # ローカルに残すアーカイブ世代数
 DEST_FOLDER="${CLAUDE_BACKUP_DEST_FOLDER:-ClaudeBackups}"
+# マシン識別。複数PCが同じ Drive/Notion を共有しても混ざらないよう、保存先サブ
+# フォルダと台帳エントリを分ける。config で CLAUDE_BACKUP_MACHINE="母艦" 等に上書き可。
+MACHINE="${CLAUDE_BACKUP_MACHINE:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)}"
 # Notion MCP サーバー名(`claude mcp list` の表示名に合わせる)。台帳記録に使用。
 NOTION_MCP="${CLAUDE_BACKUP_NOTION_MCP:-Notion}"
 NOTION_LEDGER="${CLAUDE_BACKUP_NOTION_LEDGER:-Claudeバックアップ台帳}"
@@ -125,22 +128,24 @@ log "[info] アーカイブ作成: $(basename "$UPLOAD") ($SIZE)"
 LOCAL_SYNC_DIR="${CLAUDE_BACKUP_LOCAL_SYNC_DIR:-}"
 RCLONE_REMOTE="${CLAUDE_BACKUP_RCLONE_REMOTE:-}"
 BASENAME="$(basename "$UPLOAD")"
+# マシンごとにサブフォルダを分ける(複数PCが同じ Drive を共有しても混ざらない)
+DEST_PATH="$DEST_FOLDER/$MACHINE"
 UPLOAD_LINK=""
 UPLOAD_OK=0
 
 if [ -n "$LOCAL_SYNC_DIR" ]; then
-  if mkdir -p "$LOCAL_SYNC_DIR/$DEST_FOLDER" && cp "$UPLOAD" "$LOCAL_SYNC_DIR/$DEST_FOLDER/"; then
+  if mkdir -p "$LOCAL_SYNC_DIR/$DEST_PATH" && cp "$UPLOAD" "$LOCAL_SYNC_DIR/$DEST_PATH/"; then
     UPLOAD_OK=1
-    UPLOAD_LINK="$LOCAL_SYNC_DIR/$DEST_FOLDER/$BASENAME"
+    UPLOAD_LINK="$LOCAL_SYNC_DIR/$DEST_PATH/$BASENAME"
     log "[ok] 同期フォルダへ配置(自動クラウド同期): $UPLOAD_LINK"
   else
     log "[warn] 同期フォルダへのコピー失敗: $LOCAL_SYNC_DIR"
   fi
 elif [ -n "$RCLONE_REMOTE" ] && command -v rclone >/dev/null 2>&1; then
-  if rclone copy "$UPLOAD" "${RCLONE_REMOTE}:${DEST_FOLDER}/" >>"$LOG_FILE" 2>&1; then
+  if rclone copy "$UPLOAD" "${RCLONE_REMOTE}:${DEST_PATH}/" >>"$LOG_FILE" 2>&1; then
     UPLOAD_OK=1
-    UPLOAD_LINK="$(rclone link "${RCLONE_REMOTE}:${DEST_FOLDER}/${BASENAME}" 2>/dev/null || true)"
-    [ -z "$UPLOAD_LINK" ] && UPLOAD_LINK="${RCLONE_REMOTE}:${DEST_FOLDER}/${BASENAME}"
+    UPLOAD_LINK="$(rclone link "${RCLONE_REMOTE}:${DEST_PATH}/${BASENAME}" 2>/dev/null || true)"
+    [ -z "$UPLOAD_LINK" ] && UPLOAD_LINK="${RCLONE_REMOTE}:${DEST_PATH}/${BASENAME}"
     log "[ok] rclone でアップロード: $UPLOAD_LINK"
   else
     log "[warn] rclone アップロード失敗 (remote=$RCLONE_REMOTE)"
@@ -172,21 +177,23 @@ if command -v claude >/dev/null 2>&1; then
 記録のみ行ってください(アップロードはしない)。
 1. Notion の台帳データベース(@@LEDGER_URL@@ があればそれを、無ければ
    名前「@@LEDGER@@」で検索)を開く。見つからなければ作成する
-   (プロパティ: エントリ=title, 日時=date, 種別=select[フルバックアップ/設定変更/
-    スケジュール変更], 変更サマリ=rich_text, 変更ファイル=rich_text,
+   (プロパティ: エントリ=title, 日時=date, マシン=rich_text, 種別=select[フルバックアップ/
+    設定変更/スケジュール変更], 変更サマリ=rich_text, 変更ファイル=rich_text,
     アーカイブリンク=url, サイズ=rich_text, 状態=select[成功/失敗])。
+   「マシン」プロパティが無ければ rich_text で追加してから進める。
 2. 下記の差分を読み、人間が読める変更サマリと種別を判定する。
    --- 前回からのファイル差分 ---
    @@DIFF@@
    --- ここまで ---
-3. 台帳に1行追加する: エントリ=「バックアップ @@STAMP@@」、日時=今、種別=判定結果、
-   変更サマリ=要約、変更ファイル=差分の対象、アーカイブリンク=「@@LINK@@」、
-   サイズ=@@SIZE@@、状態=@@STATUS@@。簡潔に。
+3. 台帳に1行追加する: エントリ=「@@MACHINE@@ @@STAMP@@」、日時=今、マシン=@@MACHINE@@、
+   種別=判定結果、変更サマリ=要約、変更ファイル=差分の対象、
+   アーカイブリンク=「@@LINK@@」、サイズ=@@SIZE@@、状態=@@STATUS@@。簡潔に。
 EOF
 )
   PROMPT=$TEMPLATE
   PROMPT=${PROMPT//@@LEDGER_URL@@/$NOTION_LEDGER_URL}
   PROMPT=${PROMPT//@@LEDGER@@/$NOTION_LEDGER}
+  PROMPT=${PROMPT//@@MACHINE@@/$MACHINE}
   PROMPT=${PROMPT//@@STAMP@@/$STAMP}
   PROMPT=${PROMPT//@@SIZE@@/$SIZE}
   PROMPT=${PROMPT//@@LINK@@/$UPLOAD_LINK}

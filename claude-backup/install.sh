@@ -24,6 +24,11 @@ CONFIG="$DEST/config"
 if [ ! -f "$CONFIG" ]; then
   cat >"$CONFIG" <<'CONFIG_EOF'
 # Claude バックアップ設定 (KEY=VALUE)。run-backup.sh が起動時に読み込む。
+
+# マシン名(複数PCで同じ Drive/Notion を共有する時に分離するためのラベル)。
+# 未設定なら hostname を使用。日本語で分かりやすくしてもよい。
+# CLAUDE_BACKUP_MACHINE="母艦"
+
 # クラウド転送先は下記のどちらか一方を有効化してください。
 
 # 方式A(推奨・追加ツール不要): Google Drive / Box デスクトップ同期フォルダへ cp
