@@ -70,6 +70,7 @@ git clone <this-repo> && cd <this-repo>/claude-backup
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
+| `CLAUDE_BACKUP_MACHINE` | `hostname` | マシン識別ラベル。保存先サブフォルダと台帳に使用(複数PC分離用) |
 | `CLAUDE_BACKUP_LOCAL_SYNC_DIR` | (空) | Drive/Box 同期フォルダのパス。設定するとそこへ cp(推奨) |
 | `CLAUDE_BACKUP_RCLONE_REMOTE` | (空) | rclone の remote 名。同期フォルダ未設定時に使用 |
 | `CLAUDE_BACKUP_DEST_FOLDER` | `ClaudeBackups` | 保存先サブフォルダ名 |
@@ -83,6 +84,18 @@ git clone <this-repo> && cd <this-repo>/claude-backup
 > Notion MCP サーバー名は `claude mcp list` の表示名に一致させること(台帳記録の
 > `--allowedTools` 照合に使用)。**実ファイルのアップロードに MCP は使わない**
 > (バイナリ非対応のため)。転送は同期フォルダ cp か rclone で行う。
+
+## 複数マシンで使う
+
+各PCにこのキットを個別にインストールする(守る対象は各PCのローカル `~/.claude/`)。
+同じ Google Drive / Notion 台帳を共有しても、`CLAUDE_BACKUP_MACHINE` でマシンごとに
+分離される:
+
+- Drive: `ClaudeBackups/<マシン名>/` にマシン別サブフォルダで保存
+- Notion: 台帳の「マシン」列と、エントリ名「<マシン名> <日時>」で識別
+
+各PCの `~/.claude/backup/config` に `CLAUDE_BACKUP_MACHINE="母艦"` のように設定する
+(未設定なら hostname)。
 
 ## 対応プラットフォーム
 
