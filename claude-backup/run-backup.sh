@@ -160,6 +160,40 @@ if [ "$UPLOAD_OK" -eq 0 ]; then
   UPLOAD_LINK="(ローカルのみ) $STATE_DIR/$BASENAME"
 fi
 
+# 転送成功時、フォルダ直下に「復元手順.txt」を最新化(データの隣に手順書を置く)
+if [ "$UPLOAD_OK" -eq 1 ]; then
+  README_TMP="$WORK/復元手順.txt"
+  cat >"$README_TMP" <<'RM'
+【Claude バックアップ】このフォルダについて
+
+各PCの ~/.claude/(設定・スキル・コマンド・スケジュール定義など)の自動バックアップが、
+マシン別サブフォルダに入っています。例) 母艦/  会社/  … 各 claude-backup-YYYYMMDD-HHMMSS.tar.gz
+
+■ PCがクラッシュした時の復元手順
+ 1) 復元したいマシンのサブフォルダを開き、一番新しい claude-backup-*.tar.gz をダウンロード
+ 2) 新しいMacで復元スクリプトを取得して実行:
+      git clone https://github.com/suhara-gif/my-project
+      ~/my-project/claude-backup/restore.sh ~/Downloads/claude-backup-YYYYMMDD-HHMMSS.tar.gz
+ 3) 復元後に  claude login  で再認証(認証トークンはバックアップに含めていません)
+
+■ スクリプト無しの手動復元
+      mkdir -p ~/.claude
+      tar xzf ~/Downloads/claude-backup-YYYYMMDD-HHMMSS.tar.gz -C ~/
+      claude login
+
+■ 詳しい台帳・手順(クラウド/スマホ可)
+   Notion「Claude運用」: https://app.notion.com/p/37764afca07581e1bbe5c4d94b768a8d
+   GitHub: https://github.com/suhara-gif/my-project (claude-backup/README.md)
+
+※ 拡張子が .age のものは暗号化版:  age -d -i <鍵> file.age | tar xz -C ~/
+RM
+  if [ -n "$LOCAL_SYNC_DIR" ]; then
+    cp "$README_TMP" "$LOCAL_SYNC_DIR/$DEST_FOLDER/" 2>/dev/null || true
+  elif [ -n "$RCLONE_REMOTE" ]; then
+    rclone copy "$README_TMP" "${RCLONE_REMOTE}:${DEST_FOLDER}/" >>"$LOG_FILE" 2>&1 || true
+  fi
+fi
+
 # ---- ③ Notion 台帳へ記録(テキストのみ。MCP が得意な領域) -----------------
 PREV_MANIFEST="$STATE_DIR/last-manifest.txt"
 CUR_MANIFEST="$WORK/manifest.txt"
