@@ -180,3 +180,64 @@ CPA 着地見込み   = 費用着地見込み / CV着地見込み
 - 新しい媒体（`ad_genre`）や商材（`media`）が増えても、縦型ゆえにダッシュボードの修正は不要。プルダウンに自動で増える。
 - `daily_summary`（横型）は人が眺める用の集計ビューとしては残してよいが、**BIのソースにはしない**。
 - 目標CPAを商材・媒体別に分けたくなったら、セクション3の「目標CPAマスタ＋ブレンド」へ移行する。
+
+---
+
+## 6. Claude in Chrome 用の指示文（コピペで実行）
+
+このセクションの指示文を [Claude in Chrome](https://www.anthropic.com/claude/chrome)（ブラウザを操作できるClaude）に貼り付けると、Looker Studio の構築を代行させられる。
+
+> **事前準備**：①Googleアカウントにログイン済み ②対象スプレッドシートにアクセス可能。ドラッグ操作など一部はエージェントが詰まることがあるので、その際は画面の案内に従って補助する。
+
+```
+あなたはLooker Studioでウェブ広告のBIダッシュボードを構築するアシスタントです。
+以下の手順どおりに、ブラウザを操作して作成してください。
+
+【データソース】
+- Googleスプレッドシート ID: 1kK8twfQwkeGHltU33ikYhjdYw2Y1ovSlNjgQG9Pndtk
+- 使用するシート: 「日次サマリ」（縦型データ。1行=媒体×事業×キャンペーン×日）
+- このシートの主な列:
+  日付 / ad_genre（媒体: meta,google,indeed…） / business（事業: 人材紹介,出張整備） /
+  media（CWA,TW,OS…） / campaign_name / cost（費用） / cv / cv_seibishi（整備士CV） /
+  application_count（応募） / imp / click
+
+【手順1: データソース接続】
+1. https://lookerstudio.google.com/ を開く →「作成」→「データソース」。
+2. コネクタ「Googleスプレッドシート」を選び、上記IDのファイル → ワークシート「日次サマリ」を指定。
+   「先頭行をヘッダーとして使用」をオンにして接続。
+3. フィールドの型を確認: 日付=日付型、cost/cv/cv_seibishi/application_count/imp/click=数値型。
+
+【手順2: 計算フィールドを作成】（データソース編集画面の「フィールドを追加」から）
+※比率は必ず「合計を割り戻す」式にすること（行ごとの値を平均してはいけない）。
+- CPA          = SUM(cost) / SUM(cv)              ［表示形式: 通貨¥］
+- CPC          = SUM(cost) / SUM(click)           ［通貨¥］
+- CTR          = SUM(click) / SUM(imp)            ［パーセント］
+- CVR          = SUM(cv) / SUM(click)             ［パーセント］
+- CPA_整備士   = SUM(cost) / SUM(cv_seibishi)     ［通貨¥］
+- 目標CPA      = 11000
+- CPA差分      = (SUM(cost) / SUM(cv)) - 11000
+- CPA達成率    = (SUM(cost) / SUM(cv)) / 11000
+- CPAステータス = CASE
+                   WHEN SUM(cv) = 0 THEN "CVなし"
+                   WHEN (SUM(cost) / SUM(cv)) <= 11000 THEN "達成"
+                   ELSE "未達"
+                 END
+※注意: Looker Studioに LAST_DAY 関数は無い。また1つの式の中で
+  SUM() と CURRENT_DATE()等の日付関数を混在させるとエラーになる。
+  「月末着地見込み」は今回は作らなくてよい（後でスプレッドシート側で計算する）。
+
+【手順3: レポート（ダッシュボード）を作成】
+このデータソースから新規レポートを作り、上から4セクションを配置:
+- 最上部: 期間設定コントロール（既定=今月）＋ プルダウン（ad_genre / business / media）
+- ①全体KPI: スコアカード（費用=SUM(cost) / CV=SUM(cv) / CPA / 目標CPA）と、
+  時系列グラフ（横軸=日付、棒=SUM(cost)、線=CPA を第2軸）
+- ②媒体別比較: 表（ディメンション=ad_genre、指標=SUM(cost),SUM(cv),CPA,CTR,CVR）と、
+  ad_genre別CPAの棒グラフ（参照線 11000 を追加）
+- ③商材・職種別: 表（ディメンション=business＋media、指標=SUM(cost),SUM(cv),CPA）、
+  整備士カード（SUM(cv_seibishi) / CPA_整備士）
+- ④目標CPA達成: 表（ディメンション=media、指標=CPA,CPA差分,CPA達成率）に
+  CPAステータスで条件付き色分け（達成=緑/未達=赤）
+
+【完了後】
+作成したレポートの共有URLを教えてください。各セクションが正しく表示されているか確認します。
+```
