@@ -1,0 +1,15 @@
+{
+  "_comment": "この snippet を ローカルの ~/.claude/settings.json にマージしてください(丸ごとコピーせず hooks ブロックを統合)。SessionEnd でセッション終了ごとに session-mine.sh が発火し、直前のセッションから決定・ミス・パターンを採掘して vault/raw/sessions/ に日付きノートを残します。session-mine.sh 側に再帰ガードと最小実行間隔(既定15分)があるので、claude -p の子セッションで無限ループしたり連発で無駄打ちしたりしません。夜間コンパイル・週次lint・週次総合は install.sh が launchd/cron に登録します(フックではありません)。",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/second-brain/session-mine.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
