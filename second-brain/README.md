@@ -75,6 +75,7 @@ git clone <this-repo> && cd <this-repo>/second-brain
 | `SECOND_BRAIN_MIN_INTERVAL` | `900` | セッション採掘の最小間隔(秒) |
 | `SECOND_BRAIN_GIT` | `1` | 書き込み後に git チェックポイントを打つ |
 | `SECOND_BRAIN_RESEARCH_EXPIRE_DAYS` | `30` | リサーチ結果の既定失効日数 |
+| `SECOND_BRAIN_RESEARCH_MCP` | (自動検出) | リサーチで許可する MCP サーバー名(空白区切り)。未設定なら `claude mcp list` から検出 |
 
 ## 使い方
 

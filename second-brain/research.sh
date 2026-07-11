@@ -78,9 +78,25 @@ PROMPT=${PROMPT//@@OUT@@/$OUT}
 PROMPT=${PROMPT//@@EXPIRE_DAYS@@/$EXPIRE_DAYS}
 
 sb_log "[info] リサーチ開始: $QUESTION"
-# allowedTools は絞りつつ、有効な MCP を横断で使えるよう mcp__ を許可。
+
+# allowedTools を組み立てる。許可形式は「mcp__<サーバー名>」単位なので(裸の
+# mcp__ はワイルドカードにならない)、設定済み MCP サーバーを列挙して個別に許可する。
+# SECOND_BRAIN_RESEARCH_MCP(空白区切りのサーバー名)があればそれを優先、
+# 無ければ `claude mcp list` から自動検出する。
+ALLOWED="Read Write Glob Grep WebSearch WebFetch Task"
+MCP_SERVERS="${SECOND_BRAIN_RESEARCH_MCP:-}"
+if [ -z "$MCP_SERVERS" ]; then
+  MCP_SERVERS="$(claude mcp list 2>/dev/null \
+    | sed -n 's/^\([A-Za-z0-9_-][A-Za-z0-9_-]*\):.*/\1/p' | sort -u | tr '\n' ' ')"
+fi
+for _srv in $MCP_SERVERS; do
+  ALLOWED="$ALLOWED mcp__$_srv"
+done
+[ -n "$MCP_SERVERS" ] && sb_log "[info] MCP を許可: $MCP_SERVERS"
+
+# shellcheck disable=SC2086  # ALLOWED は意図的に単語分割する(ツール名は空白を含まない)
 if sb_run_claude "$MODEL_SMART" "$PROMPT" \
-      --allowedTools "Read" "Write" "Glob" "Grep" "WebSearch" "WebFetch" "Task" "mcp__" \
+      --allowedTools $ALLOWED \
       >>"$LOG_FILE" 2>&1; then
   if [ -f "$OUT" ]; then
     sb_git_checkpoint "research: $QUESTION"

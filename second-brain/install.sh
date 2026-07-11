@@ -48,6 +48,9 @@ if [ ! -f "$CONFIG" ]; then
 
 # リサーチ機の既定失効日数(stale 知識が自己申告するように)。
 # SECOND_BRAIN_RESEARCH_EXPIRE_DAYS="30"
+
+# リサーチで許可する MCP サーバー名(空白区切り)。未設定なら claude mcp list から自動検出。
+# SECOND_BRAIN_RESEARCH_MCP="Notion firecrawl"
 CONFIG_EOF
   echo "[ok] 設定雛形を作成: $CONFIG"
 else
