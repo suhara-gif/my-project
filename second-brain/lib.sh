@@ -84,7 +84,30 @@ sb_too_soon() {
 }
 sb_mark() { date +%s >"$STATE_DIR/.last-$1"; }
 
-sb_have_claude() { command -v claude >/dev/null 2>&1; }
+# ---- claude CLI の解決 -----------------------------------------------------
+# launchd も cron もログインシェルの PATH を引き継がないため、`command -v claude`
+# だけではスケジュール実行時に見つからず全ループがスキップされる。
+# 優先: config の SECOND_BRAIN_CLAUDE_BIN → PATH 上の claude → 一般的な設置場所。
+sb_resolve_claude() {
+  CLAUDE_BIN=""
+  if [ -n "${SECOND_BRAIN_CLAUDE_BIN:-}" ] && [ -x "${SECOND_BRAIN_CLAUDE_BIN}" ]; then
+    CLAUDE_BIN="$SECOND_BRAIN_CLAUDE_BIN"
+    return 0
+  fi
+  if command -v claude >/dev/null 2>&1; then
+    CLAUDE_BIN="$(command -v claude)"
+    return 0
+  fi
+  for _d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
+    if [ -x "$_d/claude" ]; then
+      CLAUDE_BIN="$_d/claude"
+      return 0
+    fi
+  done
+  return 1
+}
+
+sb_have_claude() { sb_resolve_claude; }
 
 # ---- vault の存在確認 ------------------------------------------------------
 sb_vault_ready() {
@@ -108,5 +131,8 @@ sb_git_checkpoint() {
 # 使い方: sb_run_claude <model> <prompt> [追加の claude 引数...]
 sb_run_claude() {
   _model="$1"; _prompt="$2"; shift 2
-  SECOND_BRAIN_RUNNING=1 claude -p "$_prompt" --model "$_model" "$@"
+  sb_resolve_claude || return 127
+  # claude が内部で呼ぶ補助コマンドのために、実体のディレクトリを PATH にも足す
+  PATH="$(dirname "$CLAUDE_BIN"):$PATH" SECOND_BRAIN_RUNNING=1 \
+    "$CLAUDE_BIN" -p "$_prompt" --model "$_model" "$@"
 }

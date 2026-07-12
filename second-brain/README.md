@@ -76,6 +76,7 @@ git clone <this-repo> && cd <this-repo>/second-brain
 | `SECOND_BRAIN_GIT` | `1` | 書き込み後に git チェックポイントを打つ |
 | `SECOND_BRAIN_RESEARCH_EXPIRE_DAYS` | `30` | リサーチ結果の既定失効日数 |
 | `SECOND_BRAIN_RESEARCH_MCP` | (自動検出) | リサーチで許可する MCP サーバー名(空白区切り)。未設定なら `claude mcp list` から検出 |
+| `SECOND_BRAIN_CLAUDE_BIN` | (install 時に自動検出) | claude CLI の実体パス。**launchd/cron はログインシェルの PATH を引き継がない**ため、スケジュール実行で「claude CLI 不在」スキップが出る場合はここを確認 |
 
 ## 使い方
 

@@ -86,7 +86,8 @@ sb_log "[info] リサーチ開始: $QUESTION"
 ALLOWED="Read Write Glob Grep WebSearch WebFetch Task"
 MCP_SERVERS="${SECOND_BRAIN_RESEARCH_MCP:-}"
 if [ -z "$MCP_SERVERS" ]; then
-  MCP_SERVERS="$(claude mcp list 2>/dev/null \
+  # sb_have_claude(冒頭で実行済み)が CLAUDE_BIN を解決している
+  MCP_SERVERS="$("$CLAUDE_BIN" mcp list 2>/dev/null \
     | sed -n 's/^\([A-Za-z0-9_-][A-Za-z0-9_-]*\):.*/\1/p' | sort -u | tr '\n' ' ')"
 fi
 for _srv in $MCP_SERVERS; do
