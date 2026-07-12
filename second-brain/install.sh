@@ -57,6 +57,26 @@ else
   echo "[info] 既存の設定を保持: $CONFIG"
 fi
 
+# 2.5) claude CLI の実体パスを config に固定する(冪等)。
+#      launchd/cron はログインシェルの PATH を引き継がないため、いま(PATH が
+#      生きているインストール時)に解決して書き込んでおくのが最も確実。
+if ! grep -q '^SECOND_BRAIN_CLAUDE_BIN=' "$CONFIG" 2>/dev/null; then
+  if command -v claude >/dev/null 2>&1; then
+    CLAUDE_PATH="$(command -v claude)"
+    {
+      echo ""
+      echo "# claude CLI の実体パス(launchd/cron は PATH を引き継がないため明示)。install.sh が自動検出。"
+      echo "SECOND_BRAIN_CLAUDE_BIN=\"$CLAUDE_PATH\""
+    } >>"$CONFIG"
+    echo "[ok] claude CLI を検出して config に固定: $CLAUDE_PATH"
+  else
+    echo "[warn] claude CLI が PATH に見つからない。スケジュール実行が全てスキップされます。"
+    echo "       導入後に $CONFIG へ SECOND_BRAIN_CLAUDE_BIN=\"/path/to/claude\" を追記してください"
+  fi
+else
+  echo "[info] SECOND_BRAIN_CLAUDE_BIN は設定済み"
+fi
+
 # 3) vault が無ければ初期化するか尋ねる
 VAULT_PATH="${SECOND_BRAIN_VAULT:-$HOME/vault}"
 # shellcheck disable=SC1090

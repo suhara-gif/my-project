@@ -82,6 +82,7 @@ git clone <this-repo> && cd <this-repo>/claude-backup
 | `CLAUDE_BACKUP_MIN_INTERVAL` | `1800` | 連発時にスキップする最小間隔(秒) |
 | `CLAUDE_BACKUP_RETAIN_LOCAL` | `5` | ローカルに残す世代数 |
 | `CLAUDE_BACKUP_EXTRA_EXCLUDES` | (空) | tar の追加除外パターン(空白区切り) |
+| `CLAUDE_BACKUP_CLAUDE_BIN` | (自動探索) | claude CLI の実体パス。launchd/cron は PATH を引き継がないため、台帳記録が「claude CLI 不在」でスキップされる場合は config に明示する |
 
 > Notion MCP サーバー名は `claude mcp list` の表示名に一致させること(台帳記録の
 > `--allowedTools` 照合に使用)。**実ファイルのアップロードに MCP は使わない**

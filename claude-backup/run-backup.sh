@@ -202,7 +202,25 @@ DIFF="$(diff "$PREV_MANIFEST" "$CUR_MANIFEST" 2>/dev/null || true)"
 STATUS_TEXT="成功"
 [ "$UPLOAD_OK" -eq 0 ] && STATUS_TEXT="失敗(クラウド未転送・ローカル保持のみ)"
 
-if command -v claude >/dev/null 2>&1; then
+# claude CLI の解決。launchd/cron はログインシェルの PATH を引き継がないため、
+# `command -v` だけではスケジュール実行時に見つからず台帳記録がスキップされる。
+# 優先: config の CLAUDE_BACKUP_CLAUDE_BIN → PATH → 一般的な設置場所。
+CLAUDE_BIN="${CLAUDE_BACKUP_CLAUDE_BIN:-}"
+if [ -z "$CLAUDE_BIN" ] || [ ! -x "$CLAUDE_BIN" ]; then
+  if command -v claude >/dev/null 2>&1; then
+    CLAUDE_BIN="$(command -v claude)"
+  else
+    CLAUDE_BIN=""
+    for _d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
+      if [ -x "$_d/claude" ]; then
+        CLAUDE_BIN="$_d/claude"
+        break
+      fi
+    done
+  fi
+fi
+
+if [ -n "$CLAUDE_BIN" ]; then
   DIFF_TEXT="${DIFF:-（差分なし／初回）}"
   # 静的テンプレ(クォート付き heredoc = 一切展開しない)+ ${//} 安全置換。
   # 置換値は再展開されないため $ や $(...) を含んでも set -u クラッシュ/注入なし。
@@ -234,7 +252,7 @@ EOF
   PROMPT=${PROMPT//@@STATUS@@/$STATUS_TEXT}
   PROMPT=${PROMPT//@@DIFF@@/$DIFF_TEXT}
   # CLAUDE_BACKUP_RUNNING=1 を子に渡し、子セッションの SessionEnd で再帰しないようにする
-  if CLAUDE_BACKUP_RUNNING=1 claude -p "$PROMPT" \
+  if PATH="$(dirname "$CLAUDE_BIN"):$PATH" CLAUDE_BACKUP_RUNNING=1 "$CLAUDE_BIN" -p "$PROMPT" \
         --allowedTools "mcp__${NOTION_MCP}" \
         >>"$LOG_FILE" 2>&1; then
     log "[ok] Notion 台帳に記録 ($STATUS_TEXT)"
