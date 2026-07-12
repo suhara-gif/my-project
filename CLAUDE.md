@@ -76,6 +76,16 @@ snippet、そして shellcheck CI だけ。詳細な利用者向け説明は `cl
    - 規則: settings.json マージは `unique_by(.hooks[0].command)`、cron は既存行を
      `grep -v` で除いてから再追加。再実行しても重複しない状態を保つ。
 
+9. **スケジュール実行で外部 CLI が見つからない(`command -v` 単独依存)。**
+   launchd/cron は最小限の PATH でジョブを起動するため、Homebrew や `~/.local/bin` の
+   CLI(`claude` 等)は手動実行では見つかってもスケジュール実行では見つからず、
+   全ループが安全側スキップになる。初回の自動発火まで露見しない。
+   - 規則: 外部 CLI は config に固定した絶対パス → PATH → 既知の設置場所、の
+     **3段フォールバック**で解決する(`second-brain/lib.sh` の `sb_resolve_claude` /
+     `run-backup.sh` の `CLAUDE_BIN` 解決が基準)。install 時に `command -v` の結果を
+     config へ書き込む。検証は手動実行でなく `launchctl kickstart` で行う。
+     詳細: docs/learnings/20260712-launchd-cron-path-not-inherited.md
+
 ## 成果物ごとの品質バー（形容詞ではなくチェック項目）
 
 **シェルスクリプトの変更**（`claude-backup/*.sh`):
