@@ -51,6 +51,12 @@ if [ ! -f "$CONFIG" ]; then
 
 # リサーチで許可する MCP サーバー名(空白区切り)。未設定なら claude mcp list から自動検出。
 # SECOND_BRAIN_RESEARCH_MCP="Notion firecrawl"
+
+# 週次総合を Notion にミラーする(スマホ閲覧用の窓。1=有効、既定オフ)。
+# vault 本体はローカルのまま。Notion に転記されるのは週次総合のテキスト1枚だけ。
+# SECOND_BRAIN_NOTION_MIRROR="1"
+# SECOND_BRAIN_NOTION_MCP="Notion"                      # claude mcp list の表示名
+# SECOND_BRAIN_NOTION_PARENT="セカンドブレイン週次総合"  # ミラー先の親ページ名
 CONFIG_EOF
   echo "[ok] 設定雛形を作成: $CONFIG"
 else

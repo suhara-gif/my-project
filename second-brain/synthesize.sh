@@ -65,3 +65,36 @@ if sb_run_claude "$MODEL_SMART" "$PROMPT" \
 else
   sb_log "[warn] 週次総合に失敗"
 fi
+
+# ---- 任意: 週次総合を Notion にミラー(スマホ閲覧用の窓) -------------------
+# vault 本体はローカルの Markdown のまま(地の真実)。Notion には読み物として
+# 週次総合1枚だけをテキストで複製する。claude-backup の台帳と同じく MCP に渡すのは
+# テキストのみで、ミラーが失敗しても vault 側には一切影響しない。既定オフ。
+NOTION_MIRROR="${SECOND_BRAIN_NOTION_MIRROR:-0}"
+NOTION_MCP="${SECOND_BRAIN_NOTION_MCP:-Notion}"
+NOTION_PARENT="${SECOND_BRAIN_NOTION_PARENT:-セカンドブレイン週次総合}"
+
+if [ "$NOTION_MIRROR" = "1" ] && [ -f "$OUT" ]; then
+  BODY="$(cat "$OUT")"
+  MIRROR_TEMPLATE=$(cat <<'EOF'
+あなたは転記係です。下記の週次総合を Notion にミラーしてください(内容の改変・要約はしない)。
+1. 「@@PARENT@@」という名前のページを検索する。無ければトップレベルに作成する。
+2. その配下にサブページ「週次総合 @@DATE@@」を作成する(同名が既にあれば内容を置き換える)。
+3. 本文として下記 Markdown をそのまま転記する([[リンク]] 表記はテキストのまま残してよい)。
+--- 本文ここから ---
+@@BODY@@
+--- 本文ここまで ---
+EOF
+)
+  MIRROR_PROMPT=$MIRROR_TEMPLATE
+  MIRROR_PROMPT=${MIRROR_PROMPT//@@PARENT@@/$NOTION_PARENT}
+  MIRROR_PROMPT=${MIRROR_PROMPT//@@DATE@@/$DATE}
+  # BODY は最後に置換する(本文中に @@...@@ 風の文字列があっても誤置換しない)
+  MIRROR_PROMPT=${MIRROR_PROMPT//@@BODY@@/$BODY}
+  if sb_run_claude "$MODEL_CHEAP" "$MIRROR_PROMPT" \
+        --allowedTools "mcp__${NOTION_MCP}" >>"$LOG_FILE" 2>&1; then
+    sb_log "[ok] Notion にミラー: $NOTION_PARENT / 週次総合 $DATE"
+  else
+    sb_log "[warn] Notion ミラーに失敗(vault 側は無傷。次週に再試行)"
+  fi
+fi
