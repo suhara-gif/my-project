@@ -7,8 +7,15 @@
 ## このリポジトリは何か
 
 `~/.claude/`(設定・スキル・コマンド・スケジュール定義)をイベント発火で自動的にクラウドへ
-退避し、変更履歴を Notion 台帳に残すシェルベースのキット。中身は `claude-backup/` の4スクリプトと
-snippet、そして shellcheck CI だけ。詳細な利用者向け説明は `claude-backup/README.md`。
+退避し、変更履歴を Notion 台帳に残すシェルベースのキット(`claude-backup/`)を中核に、
+複数の独立したキットが同居するリポジトリ。詳細な利用者向け説明は各ディレクトリの README。
+
+| ディレクトリ | 中身 | この規約の適用 |
+|---|---|---|
+| `claude-backup/` | バックアップキット(本マニュアルの主対象) | 全面適用 |
+| `second-brain/` | Obsidian vault + 自動化ループ(シェル) | シェル規約・CI を同様に適用 |
+| `company/secretary/` | 秘書アプ子の設定と日常データ | `secretary.md` の運用ルールに従う |
+| `fable5-agent-system/` | Python 製エージェント実装(休止中 2026-07-15) | 対象外(再開時に要整備) |
 
 責務分離が設計の核:
 - **①固め(機械的)** `run-backup.sh` が tar 圧縮・秘密除外・暗号化を確実に行う。
@@ -25,7 +32,7 @@ snippet、そして shellcheck CI だけ。詳細な利用者向け説明は `cl
   新しい設定を足すときは README の環境変数表と `install.sh` の config 雛形も更新する。
 - 破壊的操作の前には必ず退避する(例: `restore.sh` は既存 `~/.claude` を
   `.before-restore.<stamp>` に mv してから展開する)。この作法を外さない。
-- CI は `claude-backup/*.sh` に対する **shellcheck**。警告ゼロを維持する。意図的に無効化する
+- CI は `claude-backup/*.sh` と `second-brain/*.sh` に対する **shellcheck**。警告ゼロを維持する。意図的に無効化する
   ときは `# shellcheck disable=SCxxxx` に**理由コメントを必ず併記**する(既存例に倣う)。
 
 ## 壊しやすい間違い（名前付き）と、それを防ぐ規則
