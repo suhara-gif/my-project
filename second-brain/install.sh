@@ -19,6 +19,7 @@ echo "== セカンドブレイン・キット インストール =="
 # 1) キット一式を配置(スクリプト + lib + vault テンプレート + snippet)
 mkdir -p "$DEST"
 cp "$HERE"/lib.sh "$HERE"/*.sh "$DEST/"
+cp "$HERE"/research_memory.py "$DEST/" 2>/dev/null || true
 cp "$HERE"/settings.snippet.json "$HERE"/project-CLAUDE.snippet.md "$DEST/" 2>/dev/null || true
 rm -rf "$DEST/vault-template"
 cp -R "$HERE/vault-template" "$DEST/vault-template"
