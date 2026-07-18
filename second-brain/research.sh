@@ -36,10 +36,27 @@ OUT="$VAULT/raw/research/$STAMP.md"
 # 既定の失効までの日数(AIの助言は半年前でもしばしば有害。stale は自己申告させる)。
 EXPIRE_DAYS="${SECOND_BRAIN_RESEARCH_EXPIRE_DAYS:-30}"
 
+# リサーチ記憶(任意。python3 が無ければ黙ってスキップ)。同じ・似た問いを
+# 過去に調べていないか軽くチェックし、見つかれば参考情報として渡す。
+MEMORY_HELPER="$HERE/research_memory.py"
+PRIOR=""
+if command -v python3 >/dev/null 2>&1 && [ -f "$MEMORY_HELPER" ]; then
+  CHECK_RESULT="$(python3 "$MEMORY_HELPER" check "$STATE_DIR" "$QUESTION" 2>/dev/null || true)"
+  if [ -n "$CHECK_RESULT" ]; then
+    IFS=$'\t' read -r _ PQ_SCORE PQ_DATE PQ_QUESTION PQ_PATH PQ_SUMMARY <<<"$CHECK_RESULT"
+    sb_log "[info] 類似の過去リサーチあり(品質${PQ_SCORE} / ${PQ_DATE}): ${PQ_QUESTION}"
+    PRIOR="過去の関連リサーチ(参考。鵜呑みにせず今回も独立に再検証すること):
+- ${PQ_DATE} 「${PQ_QUESTION}」品質${PQ_SCORE}
+  要約: ${PQ_SUMMARY}
+  全文: ${PQ_PATH}"
+  fi
+fi
+
 TEMPLATE=$(cat <<'EOF'
 あなたはリサーチ機です。次の問いを、鵜呑みにせず検証して調べます。
 問い: 「@@QUESTION@@」
 基準日: @@DATE@@
+@@PRIOR@@
 
 手順:
 1. 問いを 3〜5 個の小問に割る。
@@ -76,6 +93,7 @@ PROMPT=${PROMPT//@@QUESTION@@/$QUESTION}
 PROMPT=${PROMPT//@@DATE@@/$DATE}
 PROMPT=${PROMPT//@@OUT@@/$OUT}
 PROMPT=${PROMPT//@@EXPIRE_DAYS@@/$EXPIRE_DAYS}
+PROMPT=${PROMPT//@@PRIOR@@/$PRIOR}
 
 sb_log "[info] リサーチ開始: $QUESTION"
 
@@ -102,6 +120,9 @@ if sb_run_claude "$MODEL_SMART" "$PROMPT" \
   if [ -f "$OUT" ]; then
     sb_git_checkpoint "research: $QUESTION"
     sb_log "[ok] リサーチ着地 → $OUT"
+    if command -v python3 >/dev/null 2>&1 && [ -f "$MEMORY_HELPER" ]; then
+      python3 "$MEMORY_HELPER" record "$STATE_DIR" "$QUESTION" "$OUT" 2>/dev/null || true
+    fi
     echo "$OUT"
   else
     sb_log "[warn] リサーチは走ったがページ未作成"

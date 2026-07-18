@@ -47,6 +47,7 @@ Obsidian がエディタ、モデルがプログラマ、wiki がコード。ピ
 | `lint.sh` | **週次**。矛盾・重複・切れリンク・孤立を点検/軽微修正(安いモデル) |
 | `synthesize.sh` | **週次**。vault 横断で「今週の変化・ドリフト・注目」を 1 枚に(賢いモデル) |
 | `research.sh` | リサーチ機。問いを小問に割り→並行調査→懐疑ゲート→検証済み日付きページ着地 |
+| `research_memory.py` | リサーチ機の軽量記憶。似た問いを過去に調べていないか検知し、実行のたびに記憶を積む(python3 が無ければ黙ってスキップ) |
 | `install.sh` | ~/.claude/second-brain/ へ配置し、フックとスケジュールを有効化 |
 | `settings.snippet.json` | SessionEnd フックの手動マージ用断片 |
 | `project-CLAUDE.snippet.md` | 各プロジェクトの CLAUDE.md に貼る「knowledge」3 行 |
@@ -132,6 +133,17 @@ vault 側は無傷で、次週に再試行されます。
 このマシンで有効なもの(WebSearch/WebFetch、有効なら X / Firecrawl / ScrapeCreators /
 Perplexity 等の MCP)に依存し、無いものは使いません。
 
+**実行のたびに記憶が積まれます。** 似た問いを過去に投げていれば
+「類似の過去リサーチあり」とログに出て、前回の要約が今回の調査の参考情報として
+渡されます(鵜呑みにはせず今回も独立に懐疑ゲートを通します)。記憶は
+`~/.claude/second-brain/research-memory.json` に溜まり、次のコマンドで一覧できます:
+
+```bash
+python3 ~/.claude/second-brain/research_memory.py list ~/.claude/second-brain
+```
+
+`python3` が無ければこの機能は黙ってスキップされ、リサーチ本体には影響しません。
+
 ### 4. すべてのプロジェクトに配線する
 
 各プロジェクトの `CLAUDE.md` に `project-CLAUDE.snippet.md` の 3 行を足すだけ:
@@ -186,6 +198,7 @@ macOS(BSD userland / bash 3.2)と Linux(GNU)の両対応。`flock` / `mapfile` /
 - `claude` CLI(ループとリサーチが使用。無い場合はスキップし、素材は失われない)
 - `git`(単一同期系。強く推奨)、`jq`(install のフックマージ用)、`cron`/`launchd`
 - 任意: リサーチ用の MCP(X / Firecrawl / ScrapeCreators / Perplexity など)
+- 任意: `python3`(リサーチ記憶。無い場合は黙ってスキップし、リサーチ本体には影響しない)
 
 ## 設計上の割り切り
 
