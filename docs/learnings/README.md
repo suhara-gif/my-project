@@ -8,4 +8,9 @@
   (学びノートの無い解決は未完了とみなす)。
 - ファイル名は `<YYYYMMDD>-<短いスラッグ>.md`(例 `20260711-bsd-date-portability.md`)。
 
-まだ実際の解決ノートはありません。最初の非自明な問題を解いたら、その場で1件追加してください。
+## ノート一覧
+
+| ノート | 一言 |
+|---|---|
+| [20260712-launchd-cron-path-not-inherited.md](20260712-launchd-cron-path-not-inherited.md) | launchd/cron は PATH を継承しない。外部CLIは3段フォールバックで解決する |
+| [20260730-gas-dopost-no-headers-slack-retry.md](20260730-gas-dopost-no-headers-slack-retry.md) | GAS の `doPost` はHTTPヘッダを読めない。Webhookは「速く返す」でなく「冪等」で守る |
