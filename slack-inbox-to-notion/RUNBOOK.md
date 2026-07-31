@@ -78,6 +78,42 @@ GAS エディタ → **デプロイ → デプロイを管理** → 対象デプ
 
 どちらの場合も **Notion に既に入っているタスクは消えません。**
 
+## トークン・シークレットを作り直すとき
+
+漏らしてしまったとき(スクショ・画面共有・チャットへの貼り付け)や、定期的な入れ替え。
+**3種類あり、それぞれ再発行の場所が違います。**
+
+| 種類 | どこで作り直すか |
+|---|---|
+| Slack Bot Token | Slack App → **OAuth & Permissions** → **Revoke All OAuth Tokens** → 再インストール |
+| Notion API Token | https://www.notion.so/profile/integrations → 該当インテグレーション → Secret を **Rotate**<br>(Rotate が無ければ削除して作り直し、**タスクDBへの再接続を忘れない**) |
+| 共有シークレット | `npm run env:init -- --force` |
+
+反映は共通です:
+
+```bash
+open -e .env.local        # 新しい値を貼る(このウィンドウはスクショしない)
+npm run env:check         # ✓ だけ出る。値は表示されない
+npm run props:push
+# → GAS エディタで setupPropertiesFromEnvLocal を実行 → testConfig で確認
+npm run props:clean
+```
+
+**共有シークレットを変えた場合だけ**、Slack 側の貼り直しも必要です:
+
+```bash
+npm run url:full | tail -1 | tr -d ' ' | pbcopy
+```
+→ Slack App → **Event Subscriptions** → Request URL を置き換え → Verified ✓ → Save Changes
+
+> GAS 側と Slack 側の**両方**を更新すること。片方だけだと全イベントが `forbidden` で弾かれます。
+> なお**再デプロイは不要**です(URL のベース部分は変わりません)。
+
+### 値を確認したいとき
+
+`.env.local` を開かず `npm run env:check` を使ってください。設定済みかどうかだけが分かり、
+値は表示されません。**ファイルを開いた画面をスクショ・共有しないこと。**
+
 ## 設定を変えたいとき
 
 `~/my-project/slack-inbox-to-notion/` で:
