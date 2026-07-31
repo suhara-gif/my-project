@@ -68,6 +68,25 @@ Notion タスクDB に INBOX として 1 件
 
 `node`(18 以上)、`npm`、`git` が入っていること。`clasp` は `npm install` で入ります。
 
+> ### ⚠ このセットアップは「あなたのローカルPC」で実行してください
+>
+> **Claude Code のクラウドセッション(claude.ai/code の web セッション)では実行できません。**
+> クラウド実行環境のネットワークポリシーが `script.google.com` / `slack.com` /
+> `api.notion.com` への接続を **403 で拒否**するため、`clasp login` も `clasp push` も
+> 到達できません(GitHub と npm レジストリのみ許可)。
+>
+> 加えて、クラウド側にトークンを渡すにはチャットへ貼る必要があり、これは秘密の扱いとして
+> 不適切です。コンテナは一定時間で破棄されるため `.env.local` も残りません。
+>
+> **クラウドセッションでできること**: コードの変更、テスト(モック)、README 更新、PR 作業。
+> **ローカルでしかできないこと**: `clasp` 経由の GAS 反映・デプロイ、実 API を叩く
+> `testConfig` / `testDryRun` / `testRegister`、Slack 実機テスト。
+>
+> 確認コマンド(ローカルなら 200、クラウドセッションなら 000 が返ります):
+> ```bash
+> curl -s -o /dev/null -w "%{http_code}\n" https://script.google.com/
+> ```
+
 ```bash
 cd slack-inbox-to-notion
 npm install
