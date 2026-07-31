@@ -126,15 +126,37 @@ npm run props:push        # GAS へ反映
 npm run props:clean       # 後片付け
 ```
 
-コードを直した場合は、そのあと **同じ URL のまま**再デプロイします:
+コードを直した場合は、**必ず** `npm run release` を実行します:
 
 ```bash
-npm run deployments                        # デプロイID(AKfycb…)を確認
-npx clasp deploy --deploymentId <既存のID> # URL を変えずに新バージョンを公開
+npm run release
 ```
 
-> `npm run deploy` だけだと**新しい URL が発行され、Slack の Request URL を
-> 貼り直す必要が出ます。** URL を保ちたいときは上の `--deploymentId` を使ってください。
+push → 既存デプロイの更新(**URL 不変**)→ 配信中コードの検証、まで一括です。
+
+> ⚠ **`npm run push` だけでは本番は変わりません。**
+> push が更新するのはエディタで見える HEAD だけで、Slack が叩く Web App は
+> デプロイ時点のバージョンのまま動き続けます。
+> 「直したはずなのに動かない」の最頻出原因です(実際に踏みました)。
+
+## 「直したはずなのに動かない」とき
+
+**まずこれを実行してください。**
+
+```bash
+npm run verify:deployed
+```
+
+いま Slack が実際に叩いているコードのバージョンと、ローカルの最新を突き合わせます。
+
+```
+ローカル    : 2026-07-31.2
+配信中      : 2026-07-30.1
+✗ ズレています → npm run release を実行してください
+```
+
+ズレていなければ本番コードは最新なので、原因は設定(スクリプト プロパティ)か
+Slack 側にあります。`testConfig` に進んでください。
 
 ## 変えるとしたら
 

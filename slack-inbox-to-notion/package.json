@@ -10,6 +10,8 @@
     "clone": "clasp clone",
     "push": "clasp push -f",
     "open": "clasp open",
+    "release": "node tools/release.mjs",
+    "verify:deployed": "node tools/verify-deployed.mjs",
     "deploy": "clasp deploy --description slack-inbox-to-notion",
     "deployments": "clasp deployments",
     "env:init": "node tools/env-init.mjs",

@@ -15,6 +15,17 @@
  *    (スクリプトロック + event_id キャッシュ + Notion 側「Slackリンク」完全一致の三重)
  */
 
+/**
+ * デプロイ済みコードの識別子。**振る舞いを変えたら必ず上げること。**
+ *
+ * これがある理由: GAS は `clasp push` してもデプロイ済み Web App は
+ * 古いバージョンのまま動き続ける。「ローカルは直っているのに Slack から叩かれる
+ * コードは古い」というズレが、ログを読めない環境では極めて見つけにくい
+ * (実際にこれで半日溶かした)。doGet がこの値を返すので、
+ * `npm run verify:deployed` がローカルと突き合わせてズレを検出できる。
+ */
+var SCRIPT_VERSION = '2026-07-31.2';
+
 // ===== 既定値(スクリプト プロパティで上書き可能) =====
 var DEFAULTS = {
   TARGET_REACTION: 'inbox_tray',
@@ -51,6 +62,27 @@ var LOCK_WAIT_MS = 20000;
 // =====================================================================
 // エントリポイント(Slack Events API の Request URL がここを叩く)
 // =====================================================================
+
+/**
+ * デプロイ済みコードの自己申告。ブラウザや curl で叩くと、
+ * **いま Slack が実際に叩いているコード**のバージョンが分かる。
+ * `npm run verify:deployed` がこれを使ってローカルとのズレを検出する。
+ *
+ * 秘密情報は返さない(バージョンと、チャンネル限定の有無・件数だけ)。
+ * REQUEST_SECRET を設定している場合は ?secret= の一致を要求する。
+ */
+function doGet(e) {
+  var secret = prop_('REQUEST_SECRET', DEFAULTS.REQUEST_SECRET);
+  if (secret !== '' && ((e && e.parameter && e.parameter.secret) || '') !== secret) {
+    return textOut_('forbidden');
+  }
+  var ids = splitList_(prop_('TARGET_CHANNEL_ID', ''));
+  return textOut_(JSON.stringify({
+    version: SCRIPT_VERSION,
+    reaction: prop_('TARGET_REACTION', DEFAULTS.TARGET_REACTION),
+    channelFilter: ids.length ? ids.length + '件に限定' : '限定なし'
+  }));
+}
 
 /**
  * @param {Object} e Apps Script の doPost イベント。e.postData.contents に Slack の JSON。
