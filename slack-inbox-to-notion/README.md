@@ -394,15 +394,31 @@ OAuth クライアント作成が必要で、プロパティ 9 件を手で打�
 | スコープ | 何に使うか | 無いとどうなるか |
 |---|---|---|
 | `reactions:read` | `reaction_added` イベントの購読 | イベント購読を登録できない |
-| `channels:history` | `conversations.history` / `.replies` で本文取得 | `missing_scope` で本文が取れない |
+| `channels:history` | パブリックチャンネルの本文取得 | `missing_scope` で本文が取れない |
+| `groups:history` | **プライベート**チャンネルの本文取得 | プライベートで押しても本文が取れない |
 | `users:read` | `users.info` で投稿者の表示名 | 投稿者が `U…` の ID 表記のまま |
+
+`groups:history` は「Bot を招待したチャンネルならどこでも 📥 を使いたい」場合に必要です。
+**パブリックチャンネルだけで運用するなら外してかまいません**(マニフェストから1行消す)。
 
 これ以上は付けません:
 - `chat.getPermalink` は**追加スコープ不要**(Bot がチャンネルに居ればよい)
 - `chat:write` は不要(Slack へは何も書き込まない)
-- `channels:read` は不要(チャンネル表示名は `TARGET_CHANNEL_NAME` で持つ)
-- `#6-attracting` は**パブリック**なので `groups:history` は不要
-  (将来プライベート化するなら `groups:history` に読み替えが必要)
+- `channels:read` / `groups:read` は不要(チャンネル表示名は `TARGET_CHANNEL_NAME` で持つ)
+
+### 対象チャンネルの決め方
+
+`TARGET_CHANNEL_ID` の値で切り替えます。
+
+| 値 | 挙動 |
+|---|---|
+| **空**(既定) | **チャンネルを限定しない。Bot を招待したチャンネルすべてが対象。** |
+| `C06F5DJ74UU` | そのチャンネルだけ |
+| `C06...,C07...` | カンマ区切りで複数に限定 |
+
+空にしても、**Slack は Bot が参加していないチャンネルのイベントを送ってきません**。
+つまり「**どのチャンネルで有効にするか = そこに Bot を招待するかどうか**」になります。
+加えて `ALLOWED_SLACK_USER_ID` の1名しか押せないままなので、他人が勝手に登録することはありません。
 
 ---
 
@@ -494,7 +510,7 @@ Notion 上での見え方:
 | 2 | リアクションが `inbox_tray` | `skip: reaction=eyes(対象は inbox_tray)` |
 | 3 | 押した人が `U0BHT8ZB4` | `skip: user=U9999(許可は U0BHT8ZB4 のみ)` |
 | 4 | `item.type` が `message`(ファイル等は対象外) | `skip: item.type=file` |
-| 5 | `item.channel` が `C06F5DJ74UU` | `skip: channel=C0OTHER(対象は C06F5DJ74UU)` |
+| 5 | `TARGET_CHANNEL_ID` が空でなければ、そこに含まれる | `skip: channel=C0OTHER(対象は C06F5DJ74UU)` |
 | 6 | 同じ `event_id` を処理済みでない | `skip: event_id=… は処理済み(Slack の再送)` |
 | 7 | 同じ「Slackリンク」が Notion に無い | `skip: 同じ Slackリンクが既に登録済み(page id=…)` |
 

@@ -28,15 +28,20 @@ features:
 oauth_config:
   scopes:
     bot:
-      # メッセージ本文の取得(conversations.history / conversations.replies)
+      # パブリックチャンネルの本文取得(conversations.history / conversations.replies)
       - channels:history
+      # プライベートチャンネルの本文取得。
+      # 「Bot を招待したチャンネルならどこでも 📥 を使いたい」場合に必要。
+      # パブリックチャンネルだけで運用するなら、この1行を消してもかまいません。
+      - groups:history
       # reaction_added イベントの購読
       - reactions:read
       # 投稿者の表示名の解決(users.info)
       - users:read
       # ※ chat.getPermalink は追加スコープ不要
       # ※ chat:write は不要(Slack へは何も書き込まない)
-      # ※ channels:read は不要(チャンネル表示名は GAS 側の設定値で持つ)
+      # ※ channels:read / groups:read は不要
+      #    (チャンネル表示名は GAS 側の TARGET_CHANNEL_NAME で持つ)
 
 settings:
   org_deploy_enabled: false

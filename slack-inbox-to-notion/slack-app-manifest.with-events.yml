@@ -35,6 +35,7 @@ oauth_config:
   scopes:
     bot:
       - channels:history
+      - groups:history   # プライベートチャンネルの本文取得(不要なら削除可)
       - reactions:read
       - users:read
 

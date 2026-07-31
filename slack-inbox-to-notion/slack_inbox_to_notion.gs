@@ -32,14 +32,15 @@ var DEFAULTS = {
 };
 
 // 必須のスクリプト プロパティ(未設定なら testConfig() が落とす)
+// TARGET_CHANNEL_ID は必須ではない。空 = チャンネルを限定しない(Bot が招待されている
+// すべてのチャンネルが対象)。カンマ区切りで複数指定すると、その一覧に限定する。
 var REQUIRED_KEYS = [
   'SLACK_BOT_TOKEN',
   'NOTION_API_TOKEN',
   'NOTION_TASK_DATABASE_ID',
   'NOTION_ASSIGNEE_USER_ID',
   'ALLOWED_SLACK_USER_ID',
-  'TARGET_REACTION',
-  'TARGET_CHANNEL_ID'
+  'TARGET_REACTION'
 ];
 
 var NOTION_TEXT_CHUNK = 2000; // Notion の rich_text 1要素あたりの文字数上限
@@ -127,8 +128,10 @@ function handleEventCallback_(payload) {
   if (item.type !== 'message') {
     return 'skip: item.type=' + item.type + '(メッセージ以外のリアクション)';
   }
-  if (item.channel !== cfg.targetChannelId) {
-    return 'skip: channel=' + item.channel + '(対象は ' + cfg.targetChannelId + ')';
+  // TARGET_CHANNEL_ID が空ならチャンネルを限定しない。
+  // その場合の実質的な範囲は「Bot が招待されているチャンネル」= 招待が入口の管理になる。
+  if (cfg.targetChannelIds.length && cfg.targetChannelIds.indexOf(item.channel) === -1) {
+    return 'skip: channel=' + item.channel + '(対象は ' + cfg.targetChannelIds.join(', ') + ')';
   }
 
   requireConfig_(cfg); // ここから先は全プロパティが要る
@@ -175,8 +178,9 @@ function registerReaction_(cfg, target, dryRun) {
   var authorName = slackResolveUserName_(cfg.slackToken, message.user) ||
     message.username || authorId || '(不明)';
   var permalink = slackGetPermalink_(cfg.slackToken, target.channel, target.ts);
-  var channelLabel = cfg.targetChannelName ?
-    cfg.targetChannelName + '(' + target.channel + ')' : target.channel;
+  var channelName = cfg.channelNames[target.channel] || '';
+  var channelLabel = channelName ?
+    channelName + '(' + target.channel + ')' : target.channel;
 
   // 重複排除 その2: Notion 側「Slackリンク」の完全一致(これが最終的な正)
   var existing = notionFindByUrl_(cfg, permalink);
@@ -308,8 +312,10 @@ function slackApi_(token, method, params) {
 function slackErrorHint_(err) {
   var hints = {
     not_in_channel: '(→ 対象チャンネルで /invite @アプリ名 して Bot を招待してください)',
-    channel_not_found: '(→ TARGET_CHANNEL_ID を確認、または Bot をチャンネルに招待してください)',
-    missing_scope: '(→ Slack App の OAuth スコープを追加し、ワークスペースに再インストールしてください)',
+    channel_not_found: '(→ Bot をチャンネルに招待してください。プライベートチャンネルなら ' +
+      'groups:history スコープも必要です)',
+    missing_scope: '(→ Slack App の OAuth スコープを追加し、ワークスペースに再インストールしてください。' +
+      'プライベートチャンネルの本文取得には groups:history が要ります)',
     invalid_auth: '(→ SLACK_BOT_TOKEN が誤っています。xoxb- で始まる Bot User OAuth Token です)',
     not_authed: '(→ SLACK_BOT_TOKEN が未設定です)',
     ratelimited: '(→ Slack のレート制限。しばらく待つと復帰します)'
@@ -467,17 +473,50 @@ function prop_(key, fallback) {
   return v === '' ? fallback : v;
 }
 
+/** "A, B ,, C" → ['A','B','C'] */
+function splitList_(s) {
+  var out = [];
+  var parts = String(s || '').split(',');
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].trim();
+    if (p !== '') out.push(p);
+  }
+  return out;
+}
+
+/**
+ * チャンネル表示名の対応表を作る。conversations.info を呼ばずに済ませ、
+ * channels:read スコープを増やさないための仕組み。次の2形式を受け付ける:
+ *   "C123=#general,C456=#random"  … 明示マップ(推奨・順序非依存)
+ *   "#general,#random"            … TARGET_CHANNEL_ID と同じ並びで位置対応
+ * 名前が引けないチャンネルはチャンネルIDをそのまま表示する(登録は止めない)。
+ */
+function parseChannelNames_(raw, ids) {
+  var map = {};
+  var parts = splitList_(raw);
+  for (var i = 0; i < parts.length; i++) {
+    var eq = parts[i].indexOf('=');
+    if (eq > -1) {
+      map[parts[i].slice(0, eq).trim()] = parts[i].slice(eq + 1).trim();
+    } else if (ids[i]) {
+      map[ids[i]] = parts[i];
+    }
+  }
+  return map;
+}
+
 function loadConfig_() {
   var len = parseInt(prop_('TITLE_BODY_LENGTH', DEFAULTS.TITLE_BODY_LENGTH), 10);
+  var channelIds = splitList_(prop_('TARGET_CHANNEL_ID', ''));
   return {
+    targetChannelIds: channelIds,
+    channelNames: parseChannelNames_(prop_('TARGET_CHANNEL_NAME', DEFAULTS.TARGET_CHANNEL_NAME), channelIds),
     slackToken: prop_('SLACK_BOT_TOKEN', ''),
     notionToken: prop_('NOTION_API_TOKEN', ''),
     databaseId: prop_('NOTION_TASK_DATABASE_ID', ''),
     assigneeUserId: prop_('NOTION_ASSIGNEE_USER_ID', ''),
     allowedUserId: prop_('ALLOWED_SLACK_USER_ID', ''),
     targetReaction: prop_('TARGET_REACTION', DEFAULTS.TARGET_REACTION),
-    targetChannelId: prop_('TARGET_CHANNEL_ID', ''),
-    targetChannelName: prop_('TARGET_CHANNEL_NAME', DEFAULTS.TARGET_CHANNEL_NAME),
     notionVersion: prop_('NOTION_VERSION', DEFAULTS.NOTION_VERSION),
     statusValue: prop_('NOTION_STATUS_VALUE', DEFAULTS.NOTION_STATUS_VALUE),
     assigneeName: prop_('NOTION_ASSIGNEE_NAME', DEFAULTS.NOTION_ASSIGNEE_NAME),
@@ -555,11 +594,21 @@ function testConfig() {
   } catch (err) {
     errors.push('Slack 認証: ' + err.message);
   }
-  try {
-    slackApi_(cfg.slackToken, 'conversations.history', { channel: cfg.targetChannelId, limit: 1 });
-    ok.push('対象チャンネル読み取り: OK(' + cfg.targetChannelId + ')');
-  } catch (err) {
-    errors.push('対象チャンネル読み取り(' + cfg.targetChannelId + '): ' + err.message);
+  if (!cfg.targetChannelIds.length) {
+    ok.push('対象チャンネル: 限定なし(Bot を招待したチャンネルすべてが対象)');
+    console.warn('[warn] TARGET_CHANNEL_ID が空です。Bot を招待したチャンネルすべてで ' +
+      cfg.targetReaction + ' が拾われます。' +
+      'プライベートチャンネルを含めるには Slack App に groups:history スコープが必要です。');
+  } else {
+    for (var c = 0; c < cfg.targetChannelIds.length; c++) {
+      var ch = cfg.targetChannelIds[c];
+      try {
+        slackApi_(cfg.slackToken, 'conversations.history', { channel: ch, limit: 1 });
+        ok.push('対象チャンネル読み取り: OK(' + ch + ')');
+      } catch (err) {
+        errors.push('対象チャンネル読み取り(' + ch + '): ' + err.message);
+      }
+    }
   }
 
   // Notion
@@ -636,9 +685,9 @@ function runFromTestUrl_(dryRun) {
   }
   var cfg = requireConfig_(loadConfig_());
   var parsed = parsePermalink_(url);
-  if (parsed.channel !== cfg.targetChannelId) {
+  if (cfg.targetChannelIds.length && cfg.targetChannelIds.indexOf(parsed.channel) === -1) {
     console.warn('[warn] permalink のチャンネル(' + parsed.channel + ')が TARGET_CHANNEL_ID(' +
-      cfg.targetChannelId + ')と違います。本番では channel 判定でスキップされます。');
+      cfg.targetChannelIds.join(', ') + ')に含まれません。本番では channel 判定でスキップされます。');
   }
   var result = registerReaction_(cfg, {
     channel: parsed.channel,
