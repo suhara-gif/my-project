@@ -16,6 +16,7 @@
     "deployments": "clasp deployments",
     "env:init": "node tools/env-init.mjs",
     "env:check": "node tools/env-check.mjs",
+    "notion:check": "node tools/notion-check.mjs",
     "secret": "node tools/gen-secret.mjs",
     "url": "node tools/print-webapp-url.mjs",
     "url:full": "node tools/print-webapp-url.mjs --with-secret",
