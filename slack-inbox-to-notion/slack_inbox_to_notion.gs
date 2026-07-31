@@ -24,7 +24,7 @@
  * (実際にこれで半日溶かした)。doGet がこの値を返すので、
  * `npm run verify:deployed` がローカルと突き合わせてズレを検出できる。
  */
-var SCRIPT_VERSION = '2026-07-31.2';
+var SCRIPT_VERSION = '2026-07-31.3';
 
 // ===== 既定値(スクリプト プロパティで上書き可能) =====
 var DEFAULTS = {
@@ -443,13 +443,32 @@ function richText_(s) {
 
 /** 「Slackリンク」完全一致で既存ページを探す。見つかればページ ID、無ければ null。 */
 function notionFindByUrl_(cfg, url) {
+  var page = notionFindPageByUrl_(cfg, url);
+  return page ? page.id : null;
+}
+
+/** 同上だが、ページ本体を返す(ステータス等を読みたいとき用)。 */
+function notionFindPageByUrl_(cfg, url) {
   var res = notionApi_(cfg, 'post',
     'https://api.notion.com/v1/databases/' + cfg.databaseId + '/query', {
       filter: { property: cfg.propSlackUrl, url: { equals: url } },
       page_size: 1
     });
   var results = res.results || [];
-  return results.length > 0 ? results[0].id : null;
+  return results.length > 0 ? results[0] : null;
+}
+
+/** ページのプロパティから、ステータスの表示名を取り出す(status / select / rich_text 対応)。 */
+function readStatusName_(page, propName) {
+  var p = ((page || {}).properties || {})[propName];
+  if (!p) return '(不明)';
+  if (p.type === 'status') return (p.status && p.status.name) || '(空)';
+  if (p.type === 'select') return (p.select && p.select.name) || '(空)';
+  if (p.type === 'rich_text') {
+    var t = p.rich_text || [];
+    return t.length ? t[0].plain_text : '(空)';
+  }
+  return '(' + p.type + ' 型)';
 }
 
 function notionCreatePage_(cfg, properties) {
@@ -728,6 +747,56 @@ function runFromTestUrl_(dryRun) {
     eventId: '' // 手動テストでは event_id 重複排除を使わない
   }, dryRun);
   console.log(result);
+}
+
+/**
+ * 「Slackリンク」完全一致でページを探し、いまの状態を報告する。
+ *
+ * **登録できたかの確認は、必ずこの関数で行うこと。**
+ * Notion の「INBOX」ビューの件数で判定してはいけない —
+ * 登録直後に別の自動化がステータスを書き換えることがあり、
+ * 「INBOX に居ない = 登録されていない」ではないため(実際に誤判定した)。
+ * この関数は重複判定と同じ検索条件(Slackリンク完全一致)を使うので、
+ * 判定基準がコード側と完全に一致する。
+ *
+ * スクリプト プロパティ TEST_MESSAGE_URL に Slack の permalink を入れてから実行する。
+ */
+function testFindBySlackLink() {
+  var cfg = requireConfig_(loadConfig_());
+  var url = prop_('TEST_MESSAGE_URL', '');
+  if (!url) {
+    console.error('[NG] スクリプト プロパティ TEST_MESSAGE_URL に Slack の permalink を設定してください。');
+    return;
+  }
+  var parsed = parsePermalink_(url);
+  var permalink = slackGetPermalink_(cfg.slackToken, parsed.channel, parsed.ts);
+
+  var page = notionFindPageByUrl_(cfg, permalink);
+  if (!page) {
+    console.log('未登録: この Slack メッセージに対応するページはありません。');
+    console.log('  Slackリンク: ' + permalink);
+    return;
+  }
+
+  var titleProp = (page.properties || {})[cfg.propTitle] || {};
+  var titleArr = titleProp.title || [];
+  var title = titleArr.length ? titleArr[0].plain_text : '(タイトルなし)';
+  var status = readStatusName_(page, cfg.propStatus);
+
+  console.log('登録済み');
+  console.log('  タイトル   : ' + title);
+  console.log('  ステータス : ' + status);
+  console.log('  作成日時   : ' + (page.created_time || '(不明)'));
+  console.log('  最終更新   : ' + (page.last_edited_time || '(不明)'));
+  console.log('  page id    : ' + page.id);
+  console.log('  Slackリンク: ' + permalink);
+
+  if (status !== cfg.statusValue) {
+    console.warn('[warn] ステータスが「' + cfg.statusValue + '」ではなく「' + status + '」です。');
+    console.warn('  このスクリプトはページを作成するだけで、作成後に更新することは一切ありません。');
+    console.warn('  別の自動化・エージェント・手動操作が書き換えています。');
+    console.warn('  → タスクDB のオートメーション(⚡アイコン)と、他の常駐エージェントを確認してください。');
+  }
 }
 
 /**
