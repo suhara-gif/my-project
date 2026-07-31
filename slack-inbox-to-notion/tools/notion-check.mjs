@@ -59,34 +59,86 @@ const propTitle = env.PROP_TITLE || '名前';
 const propStatus = env.PROP_STATUS || 'ステータス';
 const version = env.NOTION_VERSION || '2022-06-28';
 
-const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${token}`,
-    'Notion-Version': version,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    filter: { property: propUrl, url: { equals: permalink } },
-    page_size: 5
-  })
-});
-
-const body = await res.json().catch(() => null);
-if (!res.ok) {
-  console.error(`✗ Notion API エラー (HTTP ${res.status}): ${(body && body.message) || ''}`);
-  if (res.status === 401) console.error('  → NOTION_API_TOKEN を確認してください。');
-  if (res.status === 404) console.error('  → タスクDB にインテグレーションを「接続」しているか確認してください。');
+// --- 検索キーの正規化 ---
+// GAS が保存するのは chat.getPermalink が返す URL で、スレッド内のメッセージだと
+// ?thread_ts=…&cid=… が付く。一方 Slack の「リンクをコピー」はクエリの付かない URL を返す。
+// 素朴に完全一致させると、スレッド関連メッセージで「未登録」と偽表示される(実際に踏んだ)。
+// → GAS とまったく同じ経路(chat.getPermalink)で正規化してから照合する。
+const m = permalink.match(/\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})/);
+if (!m) {
+  console.error('✗ Slack の permalink 形式ではありません: ' + permalink);
   process.exit(1);
 }
+const [, channel, tsSec, tsMicro] = m;
+const messageId = 'p' + tsSec + tsMicro; // 偽陰性時のフォールバック用
 
-const results = body.results || [];
-console.log('Slackリンク: ' + permalink);
+let canonical = permalink;
+if (env.SLACK_BOT_TOKEN) {
+  try {
+    const r = await fetch(
+      `https://slack.com/api/chat.getPermalink?channel=${encodeURIComponent(channel)}` +
+      `&message_ts=${encodeURIComponent(tsSec + '.' + tsMicro)}`,
+      { headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` } }
+    );
+    const j = await r.json();
+    if (j.ok && j.permalink) {
+      canonical = j.permalink;
+    } else {
+      console.warn(`⚠ chat.getPermalink に失敗(${j.error || 'unknown'})。入力 URL のまま照合します。`);
+    }
+  } catch {
+    console.warn('⚠ Slack に到達できませんでした。入力 URL のまま照合します。');
+  }
+}
+if (canonical !== permalink) {
+  console.log('入力 URL を Slack の正規 permalink に置き換えました(スレッド関連メッセージ)。');
+}
+
+const queryNotion = async (filter) => {
+  const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Notion-Version': version,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ filter, page_size: 5 })
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    console.error(`✗ Notion API エラー (HTTP ${res.status}): ${(body && body.message) || ''}`);
+    if (res.status === 401) console.error('  → NOTION_API_TOKEN を確認してください。');
+    if (res.status === 404) console.error('  → タスクDB にインテグレーションを「接続」しているか確認してください。');
+    process.exit(1);
+  }
+  return body.results || [];
+};
+
+console.log('Slackリンク: ' + canonical);
+
+// ① 完全一致(重複判定とまったく同じ条件)
+let results = await queryNotion({ property: propUrl, url: { equals: canonical } });
+let matchedBy = '完全一致';
+
+// ② 念のためメッセージID部分一致でも探す。①で出ず②で出るなら、
+//    保存済みURLと正規URLがずれている(= 重複登録が起きうる)ので警告する。
+if (!results.length) {
+  const loose = await queryNotion({ property: propUrl, url: { contains: messageId } });
+  if (loose.length) {
+    results = loose;
+    matchedBy = 'メッセージID部分一致';
+    console.warn('\n⚠ 完全一致では見つからず、メッセージID(' + messageId + ')の部分一致で見つかりました。');
+    console.warn('  保存済みの Slackリンクが、いま chat.getPermalink が返す URL と異なります。');
+    console.warn('  重複判定も完全一致で行うため、この状態では同じメッセージが二重登録されうるので');
+    console.warn('  Notion 側の Slackリンクを現在の正規 URL に直すことを検討してください。');
+  }
+}
 
 if (!results.length) {
   console.log('\n結果: 未登録(このSlackメッセージに対応するページはありません)');
   process.exit(2);
 }
+if (matchedBy === '完全一致') console.log('照合方法: 完全一致(重複判定と同条件)');
 
 const statusName = (p) => {
   if (!p) return '(不明)';
