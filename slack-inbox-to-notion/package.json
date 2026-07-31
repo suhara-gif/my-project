@@ -1,0 +1,25 @@
+{
+  "name": "slack-inbox-to-notion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Slack の 📥 リアクションを Notion タスクDBに INBOX 登録する GAS スクリプト(clasp 管理)",
+  "type": "module",
+  "scripts": {
+    "login": "clasp login",
+    "create": "clasp create --type webapp --title \"Slack INBOX to Notion\" --rootDir . ; git checkout -- appsscript.json",
+    "clone": "clasp clone",
+    "push": "clasp push -f",
+    "open": "clasp open",
+    "deploy": "clasp deploy --description slack-inbox-to-notion",
+    "deployments": "clasp deployments",
+    "secret": "node tools/gen-secret.mjs",
+    "url": "node tools/print-webapp-url.mjs",
+    "url:full": "node tools/print-webapp-url.mjs --with-secret",
+    "props:gen": "node tools/gen-setup-properties.mjs",
+    "props:push": "npm run props:gen && clasp push -f",
+    "props:clean": "node tools/clean-setup-properties.mjs && clasp push -f"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}

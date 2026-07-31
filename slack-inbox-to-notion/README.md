@@ -4,17 +4,15 @@ Slack のメッセージに **📥(`:inbox_tray:`)** を押すと、その内容
 「INBOX」ステータスで 1 件登録**される仕組みです。あとで整理する前提の「とりあえず放り込む」入口。
 
 - 方式: **Slack Events API → Google Apps Script(Web App) → Notion API**
-- Workflow Builder は使いません(有料プラン依存・分岐が書けないため)。
-- Zapier / Make など課金前提の外部自動化も使いません。
+- Workflow Builder は使いません。Zapier / Make など課金前提の外部自動化も使いません。
 - カスタムエージェントも使いません。動くのは GAS のスクリプト 1 本だけです。
-
-## 動きの全体像
+- **コードは `clasp` で GAS へ push します。エディタへの手コピペは不要です。**
 
 ```
 Slack #6-attracting のメッセージに 📥 を押す
         ↓ Slack Events API (reaction_added)
 GAS Web App  doPost()
-        ↓  ① 4つの門番(リアクション/押した人/チャンネル/メッセージ種別)で弾く
+        ↓  ① 門番(合言葉/リアクション/押した人/チャンネル/種別)で弾く
         ↓  ② Slack API で 本文・投稿者・permalink を取得
         ↓  ③ Notion に同じ「Slackリンク」が無いか確認(重複判定)
         ↓  ④ 無ければ pages.create
@@ -25,21 +23,69 @@ Notion タスクDB に INBOX として 1 件
 
 | ファイル | 役割 |
 |---|---|
-| `slack_inbox_to_notion.gs` | 本体。これ 1 枚を GAS プロジェクトに貼る。 |
-| `.env.example` | スクリプト プロパティに入れる項目の雛形(placeholder のみ)。 |
-| `README.md` | この文書。セットアップ・テスト・切り分け。 |
+| `slack_inbox_to_notion.gs` | 本体。clasp が GAS へ push する。 |
+| `appsscript.json` | GAS のマニフェスト。**Web App の公開設定(全員/自分として実行)と最小 OAuth スコープをここで宣言**しているので、デプロイ設定を画面で選ぶ必要がない。 |
+| `.clasp.json.example` | clasp の設定雛形。実体 `.clasp.json` は `npm run create` / `clone` が生成(gitignore 済み)。 |
+| `.claspignore` | GAS へ送るファイルを 3 つだけに限定。 |
+| `.env.example` | 設定値の雛形。`cp .env.example .env.local` して実値を入れる。 |
+| `package.json` | clasp まわりの npm scripts。 |
+| `tools/gen-setup-properties.mjs` | `.env.local` から**スクリプト プロパティ一括設定用の使い捨てファイル**を生成。 |
+| `tools/clean-setup-properties.mjs` | その使い捨てファイルをローカル・GAS 双方から削除。 |
+| `tools/gen-secret.mjs` | 共有シークレットのランダム値を生成。 |
+| `tools/print-webapp-url.mjs` | デプロイ済み Web App の URL を `?secret=` 付きで組み立てて表示。 |
+| `slack-app-manifest.yml` | Slack App 作成用マニフェスト①(そのまま貼れる)。 |
+| `slack-app-manifest.with-events.yml` | Request URL 登録用マニフェスト②(1 行だけ書き換え)。 |
 
-> **秘密情報はコードに書きません。** トークン類はすべて GAS の
-> 「プロジェクトの設定 → スクリプト プロパティ」に人間が入力します。
-> `.env.example` は「何を入れるか」の一覧であって、GAS からは読み込まれません。
+> **秘密情報はリポジトリに入れません。** 実値は `.env.local`(gitignore 済み)にだけ書き、
+> そこから GAS のスクリプト プロパティへ流し込みます。`.env.example` と 2 つのマニフェストは
+> placeholder のままコミットされます。
+
+---
+
+## あなたが手でやること(全体像)
+
+自動化できたところは自動化しました。**残る手作業はこれだけ**です。
+
+| # | やること | 所要 |
+|---|---|---|
+| 1 | Notion インテグレーション作成 + タスクDB に「接続」 | 2分 |
+| 2 | Slack App をマニフェスト①から作成 → インストール | 2分 |
+| 3 | `#6-attracting` に Bot を招待(`/invite @inbox-to-notion`) | 10秒 |
+| 4 | Apps Script API を ON(トグル1つ) | 10秒 |
+| 5 | `npm run login`(ブラウザで Google 認証) | 30秒 |
+| 6 | `.env.local` に 4 つの値を貼る | 2分 |
+| 7 | GAS エディタで関数を 2 回実行(初回認可を含む) | 1分 |
+| 8 | マニフェスト②に URL を貼って Slack に適用 → Reinstall | 1分 |
+| 9 | 動作テスト | 3分 |
+
+コマンドはすべてコピペで流せます。**値を手で入力するのは手順 6 の 4 箇所だけ**です。
 
 ---
 
 ## セットアップ
 
-### A. Notion 側
+### 前提
 
-1. タスクDB に以下のプロパティがあることを確認します(名前は完全一致)。
+`node`(18 以上)、`npm`、`git` が入っていること。`clasp` は `npm install` で入ります。
+
+```bash
+cd slack-inbox-to-notion
+npm install
+```
+
+> 順序が重要です。**A→B→C→D→E** の順に進めてください。
+> 「Slack の Bot Token が GAS の設定に必要」「GAS のデプロイ URL が Slack の設定に必要」と
+> 依存が交差しているため、この順以外だと必ずどこかで詰まります。
+
+### A. Notion 側(あなたの手作業 ①)
+
+1. https://www.notion.so/profile/integrations で内部インテグレーションを作成し、
+   **Internal Integration Token** を控えます。
+2. タスクDB のページを開き、右上 `…` → **接続 → 作成したインテグレーション名**。
+   **これを忘れると API から 404 になります**(最頻出のつまずき)。
+3. DB の URL から **データベースID**(32桁の16進)を控えます。
+   `https://www.notion.so/<workspace>/<★ここ★>?v=...`
+4. タスクDB のプロパティを確認します(名前は完全一致)。
 
    | プロパティ名 | 型 | 用途 |
    |---|---|---|
@@ -49,121 +95,244 @@ Notion タスクDB に INBOX として 1 件
    | `テキスト` | テキスト | Slack本文全文 + メタ情報 |
    | `Slackリンク` | URL | 元メッセージの permalink。**重複判定キー** |
 
-   「ステータス」に **`INBOX` という選択肢**を作っておいてください(無いと Notion 側で弾かれます)。
+   **「ステータス」に `INBOX` という選択肢を作っておいてください**(無いと Notion 側で弾かれます)。
    `対応日` `締切日` `プロジェクトDB` はスクリプトが触らないので空欄のままになります。
 
-2. https://www.notion.so/profile/integrations で内部インテグレーションを作成し、
-   **Internal Integration Token**(`ntn_` 始まり)を控えます。
-3. タスクDB のページを開き、右上 `…` → **接続 → 作成したインテグレーション名** を選びます。
-   **この接続を忘れると API から 404 になります**(最頻出のつまずき)。
-4. DB の URL から **データベースID**(32桁の16進)を控えます。
-   `https://www.notion.so/<workspace>/<★ここ★>?v=...`
+### B. Slack App を作る(あなたの手作業 ②③)
 
-### B. Slack App 側
-
-1. https://api.slack.com/apps → **Create New App → From scratch**。ワークスペースを選択。
-2. **OAuth & Permissions → Bot Token Scopes** に、次の **3 つだけ**追加します。
-
-   | スコープ | 何に使うか | 無いとどうなるか |
-   |---|---|---|
-   | `reactions:read` | `reaction_added` イベントの購読 | イベント購読を登録できない |
-   | `channels:history` | `conversations.history` / `.replies` で本文取得 | `missing_scope` で本文が取れない |
-   | `users:read` | `users.info` で投稿者の表示名 | 投稿者が `U…` の ID 表記のまま |
-
-   **これ以上は付けません。** 特に:
-   - `chat.getPermalink` は**追加スコープ不要**(Bot がチャンネルに居ればよい)。
-   - `chat:write` は不要(このスクリプトは Slack に何も書き込みません)。
-   - `channels:read` は不要(チャンネル表示名は `TARGET_CHANNEL_NAME` で固定するため)。
-   - `#6-attracting` は**パブリック**チャンネルなので `groups:history` は不要です。
-     (将来プライベート化するなら `groups:history` に読み替えが必要)
-
-3. **Install to Workspace** し、**Bot User OAuth Token**(`xoxb-` 始まり)を控えます。
-4. Slack で `#6-attracting` を開き、**`/invite @アプリ名`** で Bot を招待します。
+1. https://api.slack.com/apps → **Create New App → From an app manifest** → ワークスペース選択
+2. **YAML** タブに `slack-app-manifest.yml` の中身を**そのまま貼って** Create。
+   (このマニフェストは書き換え不要です。スコープ 3 つだけが入っています)
+3. **Install to Workspace** → 許可。
+4. **OAuth & Permissions → Bot User OAuth Token** を控えます。
+5. Slack で `#6-attracting` を開き、**`/invite @inbox-to-notion`** で Bot を招待します。
    招待しないと `not_in_channel` になります。
 
-### C. GAS 側
+> Event Subscriptions はまだ設定しません(GAS のデプロイ URL が要るため。手順 E で行います)。
 
-1. https://script.google.com で新規プロジェクトを作成。
-2. `slack_inbox_to_notion.gs` の中身を丸ごと `コード.gs` に貼り付けて保存。
-3. **プロジェクトの設定 → スクリプト プロパティ** に、下表の**必須7件**を入力。
+### C. GAS にコードと設定を反映する
 
-   | キー | 例 / 値 |
-   |---|---|
-   | `SLACK_BOT_TOKEN` | `xoxb-…`(B-3 で控えたもの) |
-   | `NOTION_API_TOKEN` | `ntn_…`(A-2 で控えたもの) |
-   | `NOTION_TASK_DATABASE_ID` | A-4 の 32 桁 |
-   | `NOTION_ASSIGNEE_USER_ID` | 須原弘之さんの Notion UUID(下記の調べ方) |
-   | `ALLOWED_SLACK_USER_ID` | `U0BHT8ZB4` |
-   | `TARGET_REACTION` | `inbox_tray` |
-   | `TARGET_CHANNEL_ID` | `C06F5DJ74UU`(= `#6-attracting`) |
+#### C-1. Apps Script API を ON(あなたの手作業 ④)
 
-   任意項目(既定値があるので未設定でも動く)は `.env.example` を参照。
-   `TARGET_CHANNEL_NAME=#6-attracting` は入れておくと Notion の「テキスト」が読みやすくなります。
+https://script.google.com/home/usersettings を開き、**「Google Apps Script API」を ON**。
+clasp がプロジェクトを作成・更新するのに必要です。トグル 1 つだけ。
 
-   **さらに、共有シークレットを設定します**(次項 C-4)。
+#### C-2. Google 認証(あなたの手作業 ⑤)
 
-   **担当者の Notion ユーザーIDを調べる**: `NOTION_API_TOKEN` を入れた状態で、
-   GAS エディタの関数選択から **`testListNotionUsers`** を実行 → 実行ログに
-   「名前 <TAB> UUID」が並ぶので、須原弘之さんの UUID をコピーします。
+```bash
+npm run login
+```
 
-4. **共有シークレットを設定する(推奨)**
+ブラウザが開くので Google アカウントで許可します。
 
-   GAS は HTTP ヘッダを読めず Slack 署名検証ができません(→「制約」の項)。
-   代わりに **Request URL に合言葉を付けて、Slack 以外からのリクエストを弾きます。**
+#### C-3. GAS プロジェクトを用意する
 
-   - **スクリプト プロパティ名: `REQUEST_SECRET`**
-   - **URL に付けるクエリ名: `?secret=`**(この 2 つは別物です。**値だけが一致していれば OK**)
+**パターン A: 新規に作る場合**
 
-   手順:
+```bash
+npm run create
+```
 
-   1. GAS エディタで関数 **`testGenerateSecret`** を実行します。
-      実行ログにランダムな英数字 64 桁と、そのまま使える Request URL の形が出ます。
-   2. その値を **スクリプト プロパティ `REQUEST_SECRET`** に貼ります。
-   3. **同じ値**を、次の C-5 で控える Web App URL の末尾に `?secret=` として付けます
-      (Slack に登録するのはこの「`?secret=` 付き」の URL です)。
+新しい GAS プロジェクトが作られ、`.clasp.json` が生成されます。
+(このコマンドは `clasp create` の直後に `git checkout -- appsscript.json` を実行します。
+clasp がテンプレートで `appsscript.json` を上書きしてしまい、Web App の公開設定が
+消えるのを戻すためです)
 
-   ```
-   スクリプト プロパティ:
-     REQUEST_SECRET = 8f3a1c...（testGenerateSecret が出した値）
+**パターン B: 既存の GAS プロジェクトに紐づける場合**
 
-   Slack に登録する Request URL:
-     https://script.google.com/macros/s/AKfycb.../exec?secret=8f3a1c...
-                                                    ~~~~~~~~~~~~~~~~~~
-                                                    ↑ 同じ値を付ける
-   ```
+既存プロジェクトの**スクリプトID**を用意します
+(GAS エディタ → プロジェクトの設定 → スクリプト ID、または URL の
+`https://script.google.com/home/projects/★ここ★/edit`)。
 
-   注意:
-   - **値に `&` `?` `#` `/` や空白を使わない**でください。URL のクエリとして壊れます。
-     `testGenerateSecret` が出す値は英数字だけなので安全です。
-   - この URL 自体が秘密になります。Slack の Request URL 欄以外に貼らないでください。
-   - `REQUEST_SECRET` を設定したのに URL に `?secret=` を付け忘れると、
-     **URL verification の時点で Verified になりません**(その場で気づけます)。
-   - あとから値を変えるときは、**スクリプト プロパティと Slack の Request URL の両方**を
-     更新してください。片方だけだと全イベントが `forbidden` で弾かれます。
+```bash
+cp .clasp.json.example .clasp.json
+# .clasp.json を開いて <GASプロジェクトのスクリプトID> を実際のIDに置き換える
+```
 
-5. **デプロイ → 新しいデプロイ → 種類: ウェブアプリ**
-   - 次のユーザーとして実行: **自分**
-   - アクセスできるユーザー: **全員**  ← ここが「全員」でないと Slack から叩けません
-   - デプロイして表示される **`https://script.google.com/macros/s/…/exec`** を控えます
-     (`/dev` の URL ではありません)。
+または clasp に取りに行かせる場合:
 
-### D. Slack にエンドポイントを登録
+```bash
+npx clasp clone <スクリプトID> --rootDir .
+git checkout -- appsscript.json   # clone がテンプレートで上書きするため戻す
+```
 
-1. Slack App 管理画面 → **Event Subscriptions** → Enable Events を ON。
-2. **Request URL** に、**C-5 の `…/exec` + C-4 の `?secret=…`** を貼ります。
+> ⚠ パターン B は**既存プロジェクトの中身を置き換えます**。`clasp push` は
+> ローカルに無いファイルをリモートから削除します。既存コードがある場合は
+> 先に `npx clasp pull` で退避するか、新規プロジェクト(パターン A)を使ってください。
 
-   ```
-   https://script.google.com/macros/s/<デプロイID>/exec?secret=<REQUEST_SECRET と同じ値>
-   ```
+#### C-4. 共有シークレットを生成する
 
-   数秒で **Verified ✓** になれば URL verification 成功です。
-   `?secret=` を付け忘れていると、ここで Verified になりません
-   (GAS の実行ログに `[deny] REQUEST_SECRET が一致しません` が出ます)。
+GAS は HTTP ヘッダを読めず Slack 署名検証ができません(→「制約」の項)。
+代わりに **Request URL に合言葉を付けて、Slack 以外からのリクエストを弾きます。**
 
-   > `REQUEST_SECRET` を設定していない場合は `?secret=` の無い `…/exec` をそのまま貼ります。
+- **スクリプト プロパティ名: `REQUEST_SECRET`**
+- **URL に付けるクエリ名: `?secret=`**
 
-3. **Subscribe to bot events** に **`reaction_added`** を追加。
-4. **Save Changes**。上部に再インストールを促すバナーが出たら **Reinstall** します。
+名前は違いますが、**値が一致していれば OK** です。値を作ります:
+
+```bash
+npm run secret
+```
+
+出た 64 桁の英数字を控えます(次の手順で `.env.local` に貼ります)。
+`?secret=` 付きの URL は後で `npm run url:full` が自動で組み立てるので、手で連結する必要はありません。
+
+> GAS エディタ側にも同じ用途の `testGenerateSecret()` があります(どちらを使っても同じ)。
+
+#### C-5. `.env.local` に実値を入れる(あなたの手作業 ⑥)
+
+```bash
+cp .env.example .env.local
+```
+
+`.env.local` を開き、**`<...>` になっている 4 箇所だけ**実値に置き換えます。
+
+| キー | 何を入れるか |
+|---|---|
+| `SLACK_BOT_TOKEN` | B-4 で控えた Bot User OAuth Token |
+| `NOTION_API_TOKEN` | A-1 で控えた Internal Integration Token |
+| `NOTION_TASK_DATABASE_ID` | A-3 で控えた 32 桁 |
+| `REQUEST_SECRET` | C-4 で出た 64 桁 |
+
+残り(`NOTION_ASSIGNEE_USER_ID` / `ALLOWED_SLACK_USER_ID` / `TARGET_REACTION` /
+`TARGET_CHANNEL_ID` / `TARGET_CHANNEL_NAME`)は**確定値が入っているのでそのままで OK** です。
+
+> `.env.local` は `.gitignore` 済みです。コミットされません。
+
+#### C-6. コードとプロパティを GAS へ push
+
+```bash
+npm run props:push
+```
+
+これは 2 つのことをします。
+
+1. `.env.local` を読んで `setup.local.gs`(スクリプト プロパティを一括設定する
+   使い捨てファイル)を生成
+2. `clasp push` で本体 + マニフェスト + 使い捨てファイルを GAS へ反映
+
+値の不備(必須キーの埋め忘れ、`REQUEST_SECRET` に URL を壊す文字が入っている等)は
+ここで止まります。
+
+#### C-7. GAS エディタで 2 つの関数を実行(あなたの手作業 ⑦)
+
+```bash
+npm run open
+```
+
+エディタが開いたら、上部の関数選択から順に実行します。
+
+1. **`setupPropertiesFromEnvLocal`** を実行
+   - **初回は認可ダイアログが出ます。**「詳細」→「(プロジェクト名)に移動」→ 許可。
+     求められる権限は「外部サービスへの接続」だけです(`appsscript.json` で最小宣言済み)。
+   - 実行ログにスクリプト プロパティ 9 件が設定されたことが出ます(トークン類はマスク表示)。
+2. **`testConfig`** を実行
+   - `----- 要対応なし -----` が出れば設定は健全です。
+   - 何か出たら「トラブルシュート」へ。
+
+#### C-8. 使い捨てファイルを消す
+
+```bash
+npm run props:clean
+```
+
+`setup.local.gs`(秘密情報の実値が入っている)をローカルからも GAS プロジェクトからも削除します。
+**プロパティ自体は GAS に保存済みなので消えません。** 設定を変えたくなったら
+`.env.local` を直して C-6〜C-8 をもう一度回すだけです。
+
+### D. Web App としてデプロイする
+
+```bash
+npm run deploy
+npm run url:full
+```
+
+`npm run deploy` はコマンドラインだけで完結します(公開設定は `appsscript.json` の
+`webapp` セクションで宣言済みなので、画面でプルダウンを選ぶ必要はありません)。
+
+`npm run url:full` は **Slack にそのまま貼れる URL** を表示します:
+
+```
+https://script.google.com/macros/s/AKfycb.../exec?secret=0a1b2c...
+```
+
+> 端末に秘密が表示されます。画面共有中は `npm run url`(secret を伏せる)を使ってください。
+
+### E. Slack に Request URL を登録する(あなたの手作業 ⑧)
+
+1. Slack App 管理画面 → 左メニュー **App Manifest** → **YAML** タブ
+2. `slack-app-manifest.with-events.yml` の中身を貼り、**`request_url:` の 1 行だけ**を
+   `npm run url:full` の出力に置き換えます。
+3. **Save Changes**。数秒で検証が通れば URL verification 成功です。
+4. 上部の **「Reinstall your app」** を押します。
+
+> 画面で設定してもかまいません: Event Subscriptions → Enable Events ON →
+> Request URL を貼る → Subscribe to bot events に `reaction_added` → Save → Reinstall。
+
+**書き換えたマニフェストをコミットしないでください**(秘密を含む URL になります)。
+
+---
+
+## clasp でどこまで CLI 化できたか
+
+| 作業 | CLI 化 | 備考 |
+|---|---|---|
+| コードの反映 | ✅ `npm run push` | 手コピペ不要 |
+| Web App の公開設定(全員/自分として実行) | ✅ `appsscript.json` | 画面でプルダウンを選ぶ必要なし |
+| OAuth スコープの宣言 | ✅ `appsscript.json` | 外部接続 1 つだけに最小化 |
+| デプロイ | ✅ `npm run deploy` | |
+| Web App URL の取得 | ✅ `npm run url:full` | `?secret=` 付きで出力 |
+| スクリプト プロパティの設定 | ⚠ 半自動 | **API が存在しない**ため、`.env.local` → 使い捨て `.gs` → エディタで 1 回実行、という経路にした |
+| **初回の OAuth 認可** | ❌ 不可 | Google の仕様。エディタで 1 回関数を実行して許可する必要がある |
+| **Apps Script API の有効化** | ❌ 不可 | ユーザー設定のトグル。1 回だけ |
+| **Google ログイン** | ❌ 不可 | `npm run login` からブラウザで認証 |
+| Slack App の作成 | ⚠ 半自動 | マニフェスト貼り付けで 1 手。Slack の CLI/API はアプリ作成に別途トークンが要り、かえって手数が増えるため採用せず |
+
+**スクリプト プロパティについて**: Apps Script API にはスクリプト プロパティを外部から
+設定するエンドポイントがありません(`clasp run` は使えますが、GCP プロジェクトの差し替えと
+OAuth クライアント作成が必要で、プロパティ 9 件を手で打つより手間が増えます)。
+そのため「ローカルの `.env.local` から使い捨ての `.gs` を生成 → push → 1 回実行 → 削除」
+という経路にしています。**あなたの操作は「エディタで関数を 1 回実行」だけ**です。
+
+---
+
+## スクリプト プロパティ
+
+必須 7 件。`.env.local` から `npm run props:push` で一括設定されます。
+
+| キー | 値 | 出どころ |
+|---|---|---|
+| `SLACK_BOT_TOKEN` | Bot User OAuth Token | 人間が入力 |
+| `NOTION_API_TOKEN` | Internal Integration Token | 人間が入力 |
+| `NOTION_TASK_DATABASE_ID` | タスクDB の ID | 人間が入力 |
+| `NOTION_ASSIGNEE_USER_ID` | 担当者の Notion UUID | `.env.example` に設定済み |
+| `ALLOWED_SLACK_USER_ID` | `U0BHT8ZB4` | `.env.example` に設定済み |
+| `TARGET_REACTION` | `inbox_tray` | `.env.example` に設定済み |
+| `TARGET_CHANNEL_ID` | `C06F5DJ74UU` | `.env.example` に設定済み |
+
+任意(既定値あり): `REQUEST_SECRET`(**設定推奨**) / `TARGET_CHANNEL_NAME` /
+`TITLE_BODY_LENGTH` / `NOTION_STATUS_VALUE` / `NOTION_ASSIGNEE_NAME` / `NOTION_VERSION` /
+`PROP_TITLE` / `PROP_STATUS` / `PROP_ASSIGNEE` / `PROP_TEXT` / `PROP_SLACK_URL` /
+`TEST_MESSAGE_URL`(テスト用)
+
+---
+
+## Slack App の必要スコープ(最小)
+
+マニフェストに書いてある **3 つだけ**です。
+
+| スコープ | 何に使うか | 無いとどうなるか |
+|---|---|---|
+| `reactions:read` | `reaction_added` イベントの購読 | イベント購読を登録できない |
+| `channels:history` | `conversations.history` / `.replies` で本文取得 | `missing_scope` で本文が取れない |
+| `users:read` | `users.info` で投稿者の表示名 | 投稿者が `U…` の ID 表記のまま |
+
+これ以上は付けません:
+- `chat.getPermalink` は**追加スコープ不要**(Bot がチャンネルに居ればよい)
+- `chat:write` は不要(Slack へは何も書き込まない)
+- `channels:read` は不要(チャンネル表示名は `TARGET_CHANNEL_NAME` で持つ)
+- `#6-attracting` は**パブリック**なので `groups:history` は不要
+  (将来プライベート化するなら `groups:history` に読み替えが必要)
 
 ---
 
@@ -211,24 +380,23 @@ Notion タスクDB に INBOX として 1 件
 
 ### 出力: Notion `pages.create` に送る中身
 
-上記イベント(本文が「新規整備士の獲得数が\n先週比で落ちている。要因分析したい。」の場合)で、
-実際に組み立てられる payload です。
+本文が「新規整備士の獲得数が\n先週比で落ちている。要因分析したい。」の場合:
 
 ```json
 {
-  "parent": { "database_id": "00000000000000000000000000000000" },
+  "parent": { "database_id": "<NOTION_TASK_DATABASE_ID>" },
   "properties": {
     "名前": {
       "title": [{ "text": { "content": "Slack｜須原弘之｜新規整備士の獲得数が 先週比で落ちている。要因分析したい。" } }]
     },
     "ステータス": { "status": { "name": "INBOX" } },
     "担当者": {
-      "people": [{ "object": "user", "id": "00000000-0000-0000-0000-000000000000" }]
+      "people": [{ "object": "user", "id": "101ad74a-c85a-4070-89d3-b37cd3c2c4af" }]
     },
     "テキスト": {
-      "rich_text": [{ "text": { "content": "【Slack本文】\n新規整備士の獲得数が\n先週比で落ちている。要因分析したい。\n\n【投稿者】須原弘之\n【チャンネル】#6-attracting(C06F5DJ74UU)\n【Slackリンク】https://apty.slack.com/archives/C06F5DJ74UU/p1753800000123456\n【リアクション】:inbox_tray:\n【登録日時】2026-07-30 15:04:05 JST" } }]
+      "rich_text": [{ "text": { "content": "【Slack本文】\n新規整備士の獲得数が\n先週比で落ちている。要因分析したい。\n\n【投稿者】須原弘之\n【チャンネル】#6-attracting(C06F5DJ74UU)\n【Slackリンク】https://<workspace>.slack.com/archives/C06F5DJ74UU/p1753800000123456\n【リアクション】:inbox_tray:\n【登録日時】2026-07-30 15:04:05 JST" } }]
     },
-    "Slackリンク": { "url": "https://apty.slack.com/archives/C06F5DJ74UU/p1753800000123456" }
+    "Slackリンク": { "url": "https://<workspace>.slack.com/archives/C06F5DJ74UU/p1753800000123456" }
   }
 }
 ```
@@ -267,7 +435,7 @@ Notion 上での見え方:
 
 ## 制約と、その回避策
 
-この方式には GAS 由来の避けられない制約が 2 つあります。**知らずに運用すると事故るので明記します。**
+GAS 由来の避けられない制約が 2 つあります。**知らずに運用すると事故るので明記します。**
 
 ### 1. Slack の署名検証ができない
 
@@ -275,8 +443,8 @@ GAS の `doPost(e)` は **HTTP ヘッダを読めません**(`e` には `postDat
 Slack が送る `X-Slack-Signature` / `X-Slack-Request-Timestamp` にアクセスできないため、
 **署名検証は原理的に不可能**です。代わりに:
 
-- Web App の URL(`/exec`)を**共有しない**。
-- スクリプト プロパティ `REQUEST_SECRET` を設定し、Request URL に `?secret=…` を付ける(上記 C-4 / D-2)。
+- Web App の URL(`?secret=` 付き)を**共有しない**。
+- `REQUEST_SECRET` を設定する(C-4)。
 - 万一 URL が漏れても、門番 3(押した人が `U0BHT8ZB4` のみ)と門番 7(重複排除)があるため、
   作れるのは「本人が押した実在メッセージ 1 件」に限られます。
 
@@ -297,44 +465,47 @@ Slack は **3 秒以内に 200 が返らないとイベントを再送**しま�
 
 ---
 
-## テスト手順
+## 実環境テスト手順
 
 Slack を経由しない順に進めると、どこで壊れているかが必ず特定できます。
+**手順 1・2 は Slack の Request URL 登録(E)より前に実行できます。**
 
-### 手順 1: 設定の健康診断(Slack 不要)
+### 手順 1: `testConfig` — 設定の健康診断(Slack 経路不要)
 
-GAS エディタで関数 **`testConfig`** を選んで実行します(初回は権限承認のダイアログが出ます)。
-実行ログに `----- 要対応なし。testDryRun() に進んでください。 -----` が出れば OK。
+GAS エディタで **`testConfig`** を実行。
+`----- 要対応なし。testDryRun() に進んでください。 -----` が出れば OK。
 
-確認される内容: 必須プロパティ7件 / **共有シークレット `REQUEST_SECRET` の設定有無と、
-値に URL を壊す文字が入っていないか** / Slack 認証 / 対象チャンネルの読み取り可否 /
-Notion DB の取得 / 5 つのプロパティの名前と型 / 「ステータス」に `INBOX` 選択肢があるか。
+確認される内容: 必須プロパティ7件 / 共有シークレットの設定有無と値の妥当性 /
+Slack 認証 / 対象チャンネルの読み取り可否 / Notion DB の取得 /
+5 つのプロパティの名前と型 / 「ステータス」に `INBOX` 選択肢があるか。
 
-`REQUEST_SECRET` 未設定なら `[warn]` が出ます(動作はしますが、URL を知られると誰でも叩けます)。
-
-### 手順 2: 書き込まずに通す(dry-run)
+### 手順 2: `testDryRun` — 書き込まずに通す
 
 1. `#6-attracting` の適当なメッセージで「リンクをコピー」。
-2. スクリプト プロパティに `TEST_MESSAGE_URL` = その URL を追加。
-3. 関数 **`testDryRun`** を実行。
+2. `.env.local` に `TEST_MESSAGE_URL=<その URL>` を追記 → `npm run props:push` →
+   エディタで `setupPropertiesFromEnvLocal` を再実行 → `npm run props:clean`
+   (1 個だけなら GAS の設定画面に直接足しても構いません)
+3. エディタで **`testDryRun`** を実行。
 
 実行ログに **Notion へ送る予定の JSON がそのまま出ます**。
 タイトル・担当者・テキストの中身をここで目視確認してください。Notion には何も書き込まれません。
 
-### 手順 3: 実際に 1 件登録する
+### 手順 3: `testRegister` — 実際に 1 件登録
 
-関数 **`testRegister`** を実行 → Notion に 1 件増えることを確認。
+エディタで **`testRegister`** を実行 → Notion に 1 件増えることを確認。
 
 **続けてもう一度 `testRegister` を実行**してください。
 ログが `skip: 同じ Slackリンクが既に登録済み(page id=…)` になれば、**重複判定が効いています**。
 
-### 手順 4: Slack から本番の経路で
+### 手順 4: Slack 本番経路
 
-1. `#6-attracting` のメッセージに 📥 を押す → Notion に 1 件増える。
-2. **同じメッセージの 📥 を外してもう一度押す** → 増えない(重複判定)。
-3. **別の絵文字**(👀 など)を押す → 増えない。
-4. **他の人**に 📥 を押してもらう → 増えない。
-5. **別チャンネル**で 📥 を押す → 増えない。
+| # | やること | 期待 |
+|---|---|---|
+| 1 | `#6-attracting` のメッセージに 📥 | Notion に 1 件増える |
+| 2 | 同じメッセージの 📥 を外してもう一度押す | 増えない(重複判定) |
+| 3 | 別の絵文字(👀 など)を押す | 増えない |
+| 4 | 他の人に 📥 を押してもらう | 増えない |
+| 5 | 別チャンネルで 📥 を押す | 増えない |
 
 各ケースの結果は GAS の **「実行数」画面**でログを見れば理由まで分かります。
 
@@ -342,70 +513,105 @@ Notion DB の取得 / 5 つのプロパティの名前と型 / 「ステータ�
 
 ---
 
-## 失敗時の切り分け
+## トラブルシュート(発生しやすい順)
 
 まず見るのは GAS の **「実行数(Executions)」** 画面です。`doPost` の行を開くとログが読めます。
-**実行が 1 行も無い = Slack から届いていない**(下表の A)。**実行はあるがログが `skip:` = 門番で弾かれた**(B)。
 
-### A. GAS に実行履歴がまったく無い
+### ① GAS の URL verification が通らない(Slack が Verified にならない)
 
-| 症状 | 原因 | 対処 |
-|---|---|---|
-| Request URL が Verified にならない | デプロイのアクセス権が「全員」でない | デプロイを編集して「アクセスできるユーザー: 全員」 |
-| 同上 | `/dev` の URL を貼っている | `/exec` の URL に差し替える |
-| 同上 | `REQUEST_SECRET` を設定したのに URL に `?secret=` が無い | Request URL を `…/exec?secret=<REQUEST_SECRET と同じ値>` にする |
-| 同上 | `?secret=` の値とプロパティの値がずれている | 両方を同じ値に揃える(`testGenerateSecret` で作り直すのが確実) |
-| ログに `[deny] REQUEST_SECRET が一致しません` | 同上 | 同上 |
-| Verified 済みだが反応しない | `reaction_added` を購読していない | Event Subscriptions → Subscribe to **bot** events に追加 |
-| 同上 | スコープ追加後に再インストールしていない | Slack App を **Reinstall** |
-| 昨日まで動いていたのに止まった | 「新しいデプロイ」を作って URL が変わった | 下記「コードを直すとき」を参照 |
+上から順に確認してください。
 
-### B. 実行履歴はあるが Notion に増えない
+| 確認 | 対処 |
+|---|---|
+| デプロイしたか | `npm run deploy` を実行。`@HEAD` はテスト用で Slack からは使えません |
+| URL は `/exec` か | `/dev` は不可。`npm run url:full` の出力をそのまま使う |
+| `?secret=` を付けたか | `REQUEST_SECRET` 設定時は必須。GAS ログに `[deny] REQUEST_SECRET が一致しません` が出ていれば確定 |
+| `?secret=` の値が一致しているか | `.env.local` の値と GAS のスクリプト プロパティが同じか確認 |
+| 公開設定が「全員」か | `appsscript.json` の `webapp.access` が `ANYONE_ANONYMOUS` であること。手でデプロイした場合は「アクセスできるユーザー: 全員」 |
+| 初回認可を済ませたか | エディタで 1 回関数を実行して許可(C-7)。未認可だと Web App が動きません |
+| GAS に実行履歴が 1 件も無い | Slack からリクエストが届いていない = 上記のどれか |
 
-ログの `skip:` をそのまま読めば理由が出ます。
+### ② Slack イベントが来ない(Verified なのに反応しない)
 
-| ログ | 意味 | 対処 |
-|---|---|---|
-| `skip: reaction=…` | 別の絵文字だった | 📥(`:inbox_tray:`)を押す |
-| `skip: user=…` | 押した人が許可外 | `ALLOWED_SLACK_USER_ID` を確認 |
-| `skip: channel=…` | 別チャンネルだった | `TARGET_CHANNEL_ID` を確認 |
-| `skip: item.type=file` | ファイルへのリアクション | メッセージ本体に押す |
-| `skip: … 既に登録済み` | 正常。重複を弾いた | Notion 側の既存行を消せば再登録できる |
+| 確認 | 対処 |
+|---|---|
+| `reaction_added` を購読したか | Event Subscriptions → Subscribe to **bot** events(user events ではない) |
+| スコープ追加後に再インストールしたか | Slack App を **Reinstall** |
+| Bot がチャンネルに居るか | `#6-attracting` で `/invite @inbox-to-notion` |
+| 昨日まで動いていたのに止まった | 「新しいデプロイ」で URL が変わった可能性(→「コードを直すとき」) |
 
-### C. エラーで落ちている
+### ③ Slack API でメッセージが読めない
 
-| エラー文言 | 原因 | 対処 |
-|---|---|---|
-| `Slack API … invalid_auth` | `SLACK_BOT_TOKEN` が誤り | `xoxb-` 始まりの Bot Token か確認 |
-| `Slack API … not_in_channel` | Bot が未招待 | `#6-attracting` で `/invite @アプリ名` |
-| `Slack API … missing_scope` | スコープ不足 | ログの `needed=` を見て追加 → Reinstall |
-| `Notion API … HTTP 401` | `NOTION_API_TOKEN` が誤り | インテグレーションのトークンを再確認 |
-| `Notion API … HTTP 404` | DB にインテグレーション未接続 / ID 誤り | DB の `…` → 接続 → インテグレーション名 |
-| `Notion DB に「○○」プロパティがありません` | プロパティ名の不一致 | ログ末尾に**実際の名前一覧**が出るので照合。DB 側を直すか `PROP_*` で上書き |
-| `Notion の「ステータス」は … 型ですが` | 型が想定外 | ステータス/選択/テキストのいずれかに変更 |
-| `Notion API … validation_error` | `INBOX` 選択肢が無い / 担当者 UUID が誤り | `testConfig` の warn を確認、`testListNotionUsers` で UUID 再取得 |
-| `スクリプト プロパティが未設定です: …` | 必須項目の入れ忘れ | 列挙されたキーを設定 |
-| `スクリプトロックを取得できませんでした` | 同時実行の競合 | 放置でよい(Slack の再送で処理される) |
+GAS ログのエラー文言で判定します。
 
-### D. Notion に同じものが 2 件できた
+| エラー | 対処 |
+|---|---|
+| `not_in_channel` | `#6-attracting` で `/invite @inbox-to-notion` |
+| `missing_scope` | ログの `needed=` を見てスコープ追加 → Reinstall |
+| `invalid_auth` / `not_authed` | `SLACK_BOT_TOKEN` が誤り。`xoxb-` 始まりの Bot Token か確認 |
+| `channel_not_found` | `TARGET_CHANNEL_ID` が誤り、または Bot 未招待 |
+| `Slack メッセージを取得できません` | 上記のいずれか。まず `testConfig` を実行して切り分ける |
 
-「Slackリンク」が完全一致でなければ別物として登録されます。次を確認してください。
+### ④ Notion DB が読めない
 
-- 手で作った行の「Slackリンク」に**末尾スラッシュや `?thread_ts=…` が付いていないか**。
-  スクリプトは必ず `chat.getPermalink` が返す形式を使うので、手入力の URL とは一致しないことがあります。
-- 重複判定は `Slackリンク` プロパティに対して行うので、**このプロパティ名を変えたら
-  `PROP_SLACK_URL` も合わせて更新**してください。
+| エラー | 対処 |
+|---|---|
+| `HTTP 401` | `NOTION_API_TOKEN` が誤り |
+| `HTTP 404` | **DB にインテグレーションを「接続」していない**(最頻出)、または DB ID が誤り |
+| `Notion DB に「○○」プロパティがありません` | プロパティ名の不一致。ログ末尾に**実際の名前一覧**が出るので照合。DB 側を直すか `PROP_*` で上書き |
+| `Notion の「ステータス」は … 型ですが` | ステータス/選択/テキストのいずれかに変更 |
+
+### ⑤ Notion の `pages.create` で失敗する
+
+| エラー | 対処 |
+|---|---|
+| `validation_error` + ステータス関連 | 「ステータス」に **`INBOX` の選択肢が無い**。Notion 側に追加(`testConfig` が warn で教えます) |
+| `validation_error` + 担当者関連 | `NOTION_ASSIGNEE_USER_ID` が誤り。`testListNotionUsers` を実行して UUID を取り直す |
+| `HTTP 400` でプロパティ名が出る | その名前のプロパティが DB に無い、または型が違う |
+
+### ⑥ 重複判定が効かない(同じものが 2 件できる)
+
+「Slackリンク」が**完全一致**でなければ別物として登録されます。
+
+| 確認 | 対処 |
+|---|---|
+| 手で作った行の URL に `?thread_ts=…` や末尾スラッシュが付いていないか | スクリプトは必ず `chat.getPermalink` の形式を使うため、手入力の URL とは一致しません |
+| `PROP_SLACK_URL` を変えていないか | プロパティ名を変えたら `PROP_SLACK_URL` も更新が必要 |
+| `Slackリンク` の型が URL か | テキスト型だと URL フィルタが効きません |
+| 2 件とも同時刻に作られたか | ロック取得に失敗した可能性。GAS ログに `スクリプトロックを取得できませんでした` が無いか確認 |
+
+### その他
+
+| エラー | 対処 |
+|---|---|
+| `スクリプト プロパティが未設定です: …` | 列挙されたキーを設定(`.env.local` を直して C-6〜C-8) |
+| clasp が `User has not enabled the Apps Script API` | C-1 のトグルを ON |
+| `npm run url` が「バージョン付きのデプロイが見つかりません」 | 先に `npm run deploy` |
+| 認可ダイアログで「このアプリは確認されていません」 | 自分で作ったプロジェクトなので「詳細」→「(名前)に移動」で進めてよい |
 
 ---
 
-## コードを直すとき(重要)
+## コードを直すとき
 
-GAS はコードを保存しただけでは公開版に反映されません。かつ、
-**「新しいデプロイ」を押すと URL が変わり、Slack 側の再設定が必要になります。**
+```bash
+npm run push     # コードを GAS に反映(この時点ではまだ公開版は変わらない)
+npm run deploy   # 新しいバージョンをデプロイ
+```
 
-URL を保ったまま更新する手順:
+⚠ **`clasp deploy` は毎回新しいデプロイを作り、URL が変わります。**
+URL が変わると Slack の Request URL を貼り直す必要があります。**URL を保ちたい場合**は、
+既存のデプロイIDを指定して更新してください。
 
-**デプロイ → デプロイを管理 → 対象の鉛筆アイコン → バージョン: 「新バージョン」 → デプロイ**
+```bash
+npm run deployments                        # デプロイID(AKfycb…)を確認
+npx clasp deploy --deploymentId <既存のID> # 同じURLのまま新バージョンを公開
+```
+
+GAS エディタから行う場合は
+**デプロイ → デプロイを管理 → 鉛筆アイコン → バージョン「新バージョン」→ デプロイ**。
+(「新しいデプロイ」を押すと URL が変わります)
+
+---
 
 ## この仕組みが持っていない機能
 

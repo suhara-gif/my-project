@@ -1,0 +1,44 @@
+# Slack App マニフェスト ①(アプリ作成用 / そのまま貼れます)
+#
+# 使い方:
+#   https://api.slack.com/apps → Create New App → From an app manifest
+#   → ワークスペース選択 → YAML タブにこの中身をそのまま貼る → Create
+#
+# ★このファイルは書き換え不要です。そのまま貼ってください。★
+#
+# なぜ Event Subscriptions がここに無いのか:
+#   Slack はマニフェスト適用時に request_url へ即座に challenge を投げて検証します。
+#   つまり「GAS のデプロイが先、Slack のイベント設定が後」でないと必ず失敗します。
+#   一方 Bot Token は GAS の設定(testConfig)に必要なので、先にアプリを作る必要があります。
+#     ① このマニフェストでアプリを作る → Bot Token を取得
+#     ② GAS を設定・デプロイして Web App URL を得る
+#     ③ slack-app-manifest.with-events.yml を貼って Request URL を登録
+#   という順序になります。詳細は README の「セットアップ」を参照。
+
+display_information:
+  name: Slack INBOX to Notion
+  description: 📥 を押したメッセージを Notion タスクDBに INBOX として登録します
+  background_color: "#2b3137"
+
+features:
+  bot_user:
+    display_name: inbox-to-notion
+    always_online: false
+
+oauth_config:
+  scopes:
+    bot:
+      # メッセージ本文の取得(conversations.history / conversations.replies)
+      - channels:history
+      # reaction_added イベントの購読
+      - reactions:read
+      # 投稿者の表示名の解決(users.info)
+      - users:read
+      # ※ chat.getPermalink は追加スコープ不要
+      # ※ chat:write は不要(Slack へは何も書き込まない)
+      # ※ channels:read は不要(チャンネル表示名は GAS 側の設定値で持つ)
+
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
