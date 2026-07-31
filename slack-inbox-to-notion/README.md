@@ -23,6 +23,7 @@ Notion タスクDB に INBOX として 1 件
 
 | ファイル | 役割 |
 |---|---|
+| **[`RUNBOOK.md`](RUNBOOK.md)** | **構築後の運用メモ。日々の使い方・止め方・設定変更はこちら。** |
 | `slack_inbox_to_notion.gs` | 本体。clasp が GAS へ push する。 |
 | `appsscript.json` | GAS のマニフェスト。**Web App の公開設定(全員/自分として実行)と最小 OAuth スコープをここで宣言**しているので、デプロイ設定を画面で選ぶ必要がない。 |
 | `.clasp.json.example` | clasp の設定雛形。実体 `.clasp.json` は `npm run create` / `clone` が生成(gitignore 済み)。 |
