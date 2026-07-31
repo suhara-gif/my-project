@@ -82,10 +82,12 @@ Notion タスクDB に INBOX として 1 件
 > **ローカルでしかできないこと**: `clasp` 経由の GAS 反映・デプロイ、実 API を叩く
 > `testConfig` / `testDryRun` / `testRegister`、Slack 実機テスト。
 >
-> 確認コマンド(ローカルなら 200、クラウドセッションなら 000 が返ります):
+> 確認コマンド:
 > ```bash
 > curl -s -o /dev/null -w "%{http_code}\n" https://script.google.com/
 > ```
+> **`302`(や `200`)が返れば到達できています** — 数字が何であれ接続自体は成功しています。
+> **`000` は接続できていない**(ポリシー拒否)ので、そのマシンでは進められません。
 
 ```bash
 cd slack-inbox-to-notion
