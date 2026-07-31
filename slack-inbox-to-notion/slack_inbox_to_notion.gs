@@ -65,12 +65,14 @@ function doPost(e) {
   }
 
   // ① 共有シークレット照合。GAS はヘッダを読めず署名検証ができないため、これが唯一の入口制限。
-  //    REQUEST_SECRET 未設定(既定)なら素通し = 後方互換。
+  //    スクリプト プロパティ REQUEST_SECRET の値を、Request URL の ?secret= と突き合わせる。
+  //    未設定(既定)なら素通し = 後方互換。運用では設定することを推奨。
   var secret = prop_('REQUEST_SECRET', DEFAULTS.REQUEST_SECRET);
   if (secret !== '') {
-    var given = (e && e.parameter && e.parameter.key) || '';
+    var given = (e && e.parameter && e.parameter.secret) || '';
     if (given !== secret) {
-      console.error('[deny] REQUEST_SECRET が一致しません。Request URL の ?key= を確認してください。');
+      console.error('[deny] REQUEST_SECRET が一致しません。Slack の Request URL の末尾が ' +
+        '「?secret=<REQUEST_SECRET と同じ値>」になっているか確認してください。');
       return textOut_('forbidden');
     }
   }
@@ -534,6 +536,18 @@ function testConfig() {
 
   var cfg = loadConfig_();
 
+  // 共有シークレット(署名検証ができない分、ここが唯一の入口制限)
+  var reqSecret = prop_('REQUEST_SECRET', '');
+  if (reqSecret === '') {
+    console.warn('[warn] REQUEST_SECRET が未設定です(URL を知っていれば誰でも叩ける状態)。' +
+      ' testGenerateSecret() で値を作り、Slack の Request URL に ?secret=… を付けてください。');
+  } else if (/[&?#\/\s]/.test(reqSecret)) {
+    errors.push('REQUEST_SECRET に & ? # / 空白 のいずれかが含まれています。' +
+      'URL のクエリとして壊れるので、英数字だけの値にしてください(testGenerateSecret() 参照)。');
+  } else {
+    ok.push('共有シークレット: 設定済み(Slack の Request URL 末尾に ?secret=<この値> が必要)');
+  }
+
   // Slack
   try {
     var auth = slackApi_(cfg.slackToken, 'auth.test', {});
@@ -633,6 +647,19 @@ function runFromTestUrl_(dryRun) {
     eventId: '' // 手動テストでは event_id 重複排除を使わない
   }, dryRun);
   console.log(result);
+}
+
+/**
+ * REQUEST_SECRET 用のランダム文字列を作ってログに出す。
+ * URL のクエリに入れるので、記号の混ざらない英数字だけにしてある。
+ * 出た値を ① スクリプト プロパティ REQUEST_SECRET と
+ * ② Slack の Request URL 末尾 ?secret=… の両方に貼る。
+ */
+function testGenerateSecret() {
+  var s = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  console.log('REQUEST_SECRET に設定する値:\n' + s);
+  console.log('\nSlack の Request URL(…/exec の部分は自分のデプロイURLに置き換える):\n' +
+    'https://script.google.com/macros/s/<デプロイID>/exec?secret=' + s);
 }
 
 /**

@@ -100,11 +100,48 @@ Notion タスクDB に INBOX として 1 件
    任意項目(既定値があるので未設定でも動く)は `.env.example` を参照。
    `TARGET_CHANNEL_NAME=#6-attracting` は入れておくと Notion の「テキスト」が読みやすくなります。
 
+   **さらに、共有シークレットを設定します**(次項 C-4)。
+
    **担当者の Notion ユーザーIDを調べる**: `NOTION_API_TOKEN` を入れた状態で、
    GAS エディタの関数選択から **`testListNotionUsers`** を実行 → 実行ログに
    「名前 <TAB> UUID」が並ぶので、須原弘之さんの UUID をコピーします。
 
-4. **デプロイ → 新しいデプロイ → 種類: ウェブアプリ**
+4. **共有シークレットを設定する(推奨)**
+
+   GAS は HTTP ヘッダを読めず Slack 署名検証ができません(→「制約」の項)。
+   代わりに **Request URL に合言葉を付けて、Slack 以外からのリクエストを弾きます。**
+
+   - **スクリプト プロパティ名: `REQUEST_SECRET`**
+   - **URL に付けるクエリ名: `?secret=`**(この 2 つは別物です。**値だけが一致していれば OK**)
+
+   手順:
+
+   1. GAS エディタで関数 **`testGenerateSecret`** を実行します。
+      実行ログにランダムな英数字 64 桁と、そのまま使える Request URL の形が出ます。
+   2. その値を **スクリプト プロパティ `REQUEST_SECRET`** に貼ります。
+   3. **同じ値**を、次の C-5 で控える Web App URL の末尾に `?secret=` として付けます
+      (Slack に登録するのはこの「`?secret=` 付き」の URL です)。
+
+   ```
+   スクリプト プロパティ:
+     REQUEST_SECRET = 8f3a1c...（testGenerateSecret が出した値）
+
+   Slack に登録する Request URL:
+     https://script.google.com/macros/s/AKfycb.../exec?secret=8f3a1c...
+                                                    ~~~~~~~~~~~~~~~~~~
+                                                    ↑ 同じ値を付ける
+   ```
+
+   注意:
+   - **値に `&` `?` `#` `/` や空白を使わない**でください。URL のクエリとして壊れます。
+     `testGenerateSecret` が出す値は英数字だけなので安全です。
+   - この URL 自体が秘密になります。Slack の Request URL 欄以外に貼らないでください。
+   - `REQUEST_SECRET` を設定したのに URL に `?secret=` を付け忘れると、
+     **URL verification の時点で Verified になりません**(その場で気づけます)。
+   - あとから値を変えるときは、**スクリプト プロパティと Slack の Request URL の両方**を
+     更新してください。片方だけだと全イベントが `forbidden` で弾かれます。
+
+5. **デプロイ → 新しいデプロイ → 種類: ウェブアプリ**
    - 次のユーザーとして実行: **自分**
    - アクセスできるユーザー: **全員**  ← ここが「全員」でないと Slack から叩けません
    - デプロイして表示される **`https://script.google.com/macros/s/…/exec`** を控えます
@@ -113,19 +150,20 @@ Notion タスクDB に INBOX として 1 件
 ### D. Slack にエンドポイントを登録
 
 1. Slack App 管理画面 → **Event Subscriptions** → Enable Events を ON。
-2. **Request URL** に C-4 の `…/exec` を貼ります。
+2. **Request URL** に、**C-5 の `…/exec` + C-4 の `?secret=…`** を貼ります。
+
+   ```
+   https://script.google.com/macros/s/<デプロイID>/exec?secret=<REQUEST_SECRET と同じ値>
+   ```
+
    数秒で **Verified ✓** になれば URL verification 成功です。
+   `?secret=` を付け忘れていると、ここで Verified になりません
+   (GAS の実行ログに `[deny] REQUEST_SECRET が一致しません` が出ます)。
+
+   > `REQUEST_SECRET` を設定していない場合は `?secret=` の無い `…/exec` をそのまま貼ります。
+
 3. **Subscribe to bot events** に **`reaction_added`** を追加。
 4. **Save Changes**。上部に再インストールを促すバナーが出たら **Reinstall** します。
-
-#### (任意・推奨)共有シークレットで入口を絞る
-
-GAS は HTTP ヘッダを読めないため Slack 署名検証ができません(→「制約」の項)。
-代わりに URL に合言葉を付けられます。
-
-1. スクリプト プロパティに `REQUEST_SECRET` = 適当な長いランダム文字列 を追加。
-2. Slack の Request URL を `https://script.google.com/macros/s/…/exec?key=<その文字列>` に変更し、
-   再度 Verified を確認。
 
 ---
 
@@ -213,7 +251,7 @@ Notion 上での見え方:
 
 | # | 条件 | 外れたときのログ |
 |---|---|---|
-| 0 | `REQUEST_SECRET` 設定時、`?key=` が一致 | `[deny] REQUEST_SECRET が一致しません` |
+| 0 | `REQUEST_SECRET` 設定時、URL の `?secret=` が一致 | `[deny] REQUEST_SECRET が一致しません` |
 | 1 | `event.type` が `reaction_added` | `skip: event.type=…` |
 | 2 | リアクションが `inbox_tray` | `skip: reaction=eyes(対象は inbox_tray)` |
 | 3 | 押した人が `U0BHT8ZB4` | `skip: user=U9999(許可は U0BHT8ZB4 のみ)` |
@@ -238,7 +276,7 @@ Slack が送る `X-Slack-Signature` / `X-Slack-Request-Timestamp` にアクセ�
 **署名検証は原理的に不可能**です。代わりに:
 
 - Web App の URL(`/exec`)を**共有しない**。
-- `REQUEST_SECRET` を設定し、Request URL に `?key=…` を付ける(上記 D の任意手順)。
+- スクリプト プロパティ `REQUEST_SECRET` を設定し、Request URL に `?secret=…` を付ける(上記 C-4 / D-2)。
 - 万一 URL が漏れても、門番 3(押した人が `U0BHT8ZB4` のみ)と門番 7(重複排除)があるため、
   作れるのは「本人が押した実在メッセージ 1 件」に限られます。
 
@@ -268,8 +306,11 @@ Slack を経由しない順に進めると、どこで壊れているかが必�
 GAS エディタで関数 **`testConfig`** を選んで実行します(初回は権限承認のダイアログが出ます)。
 実行ログに `----- 要対応なし。testDryRun() に進んでください。 -----` が出れば OK。
 
-確認される内容: 必須プロパティ7件 / Slack 認証 / 対象チャンネルの読み取り可否 /
+確認される内容: 必須プロパティ7件 / **共有シークレット `REQUEST_SECRET` の設定有無と、
+値に URL を壊す文字が入っていないか** / Slack 認証 / 対象チャンネルの読み取り可否 /
 Notion DB の取得 / 5 つのプロパティの名前と型 / 「ステータス」に `INBOX` 選択肢があるか。
+
+`REQUEST_SECRET` 未設定なら `[warn]` が出ます(動作はしますが、URL を知られると誰でも叩けます)。
 
 ### 手順 2: 書き込まずに通す(dry-run)
 
@@ -312,7 +353,9 @@ Notion DB の取得 / 5 つのプロパティの名前と型 / 「ステータ�
 |---|---|---|
 | Request URL が Verified にならない | デプロイのアクセス権が「全員」でない | デプロイを編集して「アクセスできるユーザー: 全員」 |
 | 同上 | `/dev` の URL を貼っている | `/exec` の URL に差し替える |
-| 同上 | `REQUEST_SECRET` を設定したのに URL に `?key=` が無い | URL に `?key=<値>` を付ける |
+| 同上 | `REQUEST_SECRET` を設定したのに URL に `?secret=` が無い | Request URL を `…/exec?secret=<REQUEST_SECRET と同じ値>` にする |
+| 同上 | `?secret=` の値とプロパティの値がずれている | 両方を同じ値に揃える(`testGenerateSecret` で作り直すのが確実) |
+| ログに `[deny] REQUEST_SECRET が一致しません` | 同上 | 同上 |
 | Verified 済みだが反応しない | `reaction_added` を購読していない | Event Subscriptions → Subscribe to **bot** events に追加 |
 | 同上 | スコープ追加後に再インストールしていない | Slack App を **Reinstall** |
 | 昨日まで動いていたのに止まった | 「新しいデプロイ」を作って URL が変わった | 下記「コードを直すとき」を参照 |
