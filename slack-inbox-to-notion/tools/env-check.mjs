@@ -27,9 +27,10 @@ const REQUIRED = [
   'NOTION_TASK_DATABASE_ID',
   'NOTION_ASSIGNEE_USER_ID',
   'ALLOWED_SLACK_USER_ID',
-  'TARGET_REACTION',
-  'TARGET_CHANNEL_ID'
+  'TARGET_REACTION'
 ];
+// TARGET_CHANNEL_ID は必須ではない。空 = チャンネルを限定しない(Bot を招待した
+// チャンネルすべてが対象)。空であることが正しい設定なので ✗ を出さない。
 const RECOMMENDED = ['REQUEST_SECRET', 'TARGET_CHANNEL_NAME'];
 const SECRETISH = ['SLACK_BOT_TOKEN', 'NOTION_API_TOKEN', 'REQUEST_SECRET'];
 
@@ -61,6 +62,13 @@ console.log('必須:');
 REQUIRED.forEach((k) => show(k, true));
 console.log('推奨:');
 RECOMMENDED.forEach((k) => show(k, false));
+
+console.log('対象チャンネル:');
+if ((env.TARGET_CHANNEL_ID || '') === '') {
+  console.log('  · TARGET_CHANNEL_ID  空 = 限定なし(Bot を招待したチャンネルすべてが対象)');
+} else {
+  console.log('  · TARGET_CHANNEL_ID  ' + env.TARGET_CHANNEL_ID + ' に限定');
+}
 
 if (env.REQUEST_SECRET) {
   if (/[&?#/\s]/.test(env.REQUEST_SECRET)) {

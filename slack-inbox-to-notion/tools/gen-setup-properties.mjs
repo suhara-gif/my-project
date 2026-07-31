@@ -22,12 +22,13 @@ const REQUIRED = [
   'NOTION_TASK_DATABASE_ID',
   'NOTION_ASSIGNEE_USER_ID',
   'ALLOWED_SLACK_USER_ID',
-  'TARGET_REACTION',
-  'TARGET_CHANNEL_ID'
+  'TARGET_REACTION'
 ];
 
 // 設定してよい任意キー。ここに無いキーは打ち間違いとみなして警告する。
+// TARGET_CHANNEL_ID は空 = チャンネルを限定しない、という有効な設定なので任意側。
 const OPTIONAL = [
+  'TARGET_CHANNEL_ID',
   'REQUEST_SECRET',
   'TARGET_CHANNEL_NAME',
   'TITLE_BODY_LENGTH',
@@ -59,6 +60,7 @@ if (!existsSync(ENV_PATH)) {
 // --- .env.local を読む(KEY=VALUE 形式。# 以降はコメント行のみ対応) ---
 const env = {};
 const unknown = [];
+const emptyKeys = [];
 const raw = readFileSync(ENV_PATH, 'utf8').split(/\r?\n/);
 for (const line of raw) {
   const t = line.trim();
@@ -71,10 +73,19 @@ for (const line of raw) {
   if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
     val = val.slice(1, -1);
   }
-  if (val === '') continue;
-  // 埋め忘れの <...> は未設定として扱う
+  const known = REQUIRED.includes(key) || OPTIONAL.includes(key);
+  if (!known) unknown.push(key);
+
+  // 「キーはあるが値が空」は "消したい" の意思表示として扱い、GAS 側からも削除する。
+  // ここを単に読み飛ばすと、GAS に残った古い値が生き続けて設定変更が効かない
+  // (TARGET_CHANNEL_ID を空にしてチャンネル限定を外したのに、古いIDが残る事故)。
+  if (val === '') {
+    if (known) emptyKeys.push(key);
+    continue;
+  }
+  // 埋め忘れの <...> は「未記入」なので、GAS 側は触らない(削除もしない)
   if (/^<.*>$/.test(val)) continue;
-  if (!REQUIRED.includes(key) && !OPTIONAL.includes(key)) unknown.push(key);
+
   env[key] = val;
 }
 
@@ -104,8 +115,16 @@ if ('REQUEST_SECRET' in env) {
   console.warn('⚠ REQUEST_SECRET が未設定です。Web App の URL を知られると誰でも叩ける状態になります。');
   console.warn('  GAS で testGenerateSecret() を実行 → 出た値を .env.local に入れて再実行を推奨します。');
 }
-if (!/^C[A-Z0-9]+$/.test(env.TARGET_CHANNEL_ID)) {
-  console.warn('⚠ TARGET_CHANNEL_ID が Slack のチャンネルID形式(C…)に見えません: ' + env.TARGET_CHANNEL_ID);
+if (env.TARGET_CHANNEL_ID) {
+  // カンマ区切りで複数指定できる。1件ずつ形式を見る。
+  for (const id of env.TARGET_CHANNEL_ID.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (!/^C[A-Z0-9]+$/.test(id)) {
+      console.warn('⚠ TARGET_CHANNEL_ID に Slack のチャンネルID形式(C…)でない値があります: ' + id);
+    }
+  }
+  console.log('· 対象チャンネル: ' + env.TARGET_CHANNEL_ID + ' に限定');
+} else {
+  console.log('· 対象チャンネル: 限定なし(Bot を招待したチャンネルすべてが対象)');
 }
 if (!/^U[A-Z0-9]+$/.test(env.ALLOWED_SLACK_USER_ID)) {
   console.warn('⚠ ALLOWED_SLACK_USER_ID が Slack のユーザーID形式(U…)に見えません: ' + env.ALLOWED_SLACK_USER_ID);
@@ -128,11 +147,22 @@ const out = `/**
  *      ローカルからも GAS プロジェクトからも消す
  */
 function setupPropertiesFromEnvLocal() {
+  var sp = PropertiesService.getScriptProperties();
   var props = {
 ${entries}
   };
-  // 第2引数 false = 既存の他プロパティは消さない
-  PropertiesService.getScriptProperties().setProperties(props, false);
+  // 第2引数 false = ここに無い他のプロパティは消さない
+  sp.setProperties(props, false);
+
+  // .env.local で「キーはあるが値が空」だったものは、GAS 側からも削除する。
+  // (消さないと古い値が残り、設定を空にした意味がなくなる)
+  var toDelete = ${JSON.stringify(emptyKeys.filter((k) => !(k in env)))};
+  for (var d = 0; d < toDelete.length; d++) {
+    sp.deleteProperty(toDelete[d]);
+  }
+  if (toDelete.length) {
+    console.log('空に設定されたため削除したプロパティ: ' + toDelete.join(', '));
+  }
 
   var names = Object.keys(props);
   var secretish = ['SLACK_BOT_TOKEN', 'NOTION_API_TOKEN', 'REQUEST_SECRET'];
