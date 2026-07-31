@@ -189,36 +189,67 @@ GAS は HTTP ヘッダを読めず Slack 署名検証ができません(→「�
 - **スクリプト プロパティ名: `REQUEST_SECRET`**
 - **URL に付けるクエリ名: `?secret=`**
 
-名前は違いますが、**値が一致していれば OK** です。値を作ります:
+名前は違いますが、**値が一致していれば OK** です。
 
-```bash
-npm run secret
-```
+**この値は次の C-5 (`npm run env:init`) が自動生成して `.env.local` に書き込むので、
+ここで何かする必要はありません。** 人間がシークレットの実値を目にする場面はありません。
 
-出た 64 桁の英数字を控えます(次の手順で `.env.local` に貼ります)。
-`?secret=` 付きの URL は後で `npm run url:full` が自動で組み立てるので、手で連結する必要はありません。
-
-> GAS エディタ側にも同じ用途の `testGenerateSecret()` があります(どちらを使っても同じ)。
+> **シークレットの実値を画面に出さないこと。** ターミナルに表示すると、スクロールバック・
+> スクリーンショット・チャットへの貼り付けで漏れます(このリポジトリの構築中に実際に
+> チャットへ流出させ、ローテーションする羽目になりました)。
+> `npm run url:full` の出力も `?secret=` 付きの完全 URL なので、**共有・貼り付け厳禁**です。
+> クリップボード経由で Slack の入力欄へ直接貼ってください:
+> ```bash
+> npm run url:full | tail -1 | tr -d ' ' | pbcopy
+> ```
+>
+> 漏らしてしまったら `npm run env:init -- --force` でローテーションできます
+> (GAS プロパティの再投入と Slack の Request URL 貼り直しの**両方**が必要)。
 
 #### C-5. `.env.local` に実値を入れる(あなたの手作業 ⑥)
 
 ```bash
-cp .env.example .env.local
+npm run env:init
 ```
 
-`.env.local` を開き、**`<...>` になっている 4 箇所だけ**実値に置き換えます。
+`.env.example` から `.env.local` を作り、**共有シークレットを自動生成して書き込みます**
+(C-4 を手でやる必要はありません)。**シークレットは画面に一切表示しません** —
+ターミナルのスクロールバックやスクリーンショット経由で漏れるためです。
+値が必要になるのは Slack の Request URL を作るときだけで、そこは `npm run url:full` が
+`.env.local` から読んで組み立てます。
+
+次に `.env.local` を開いて、**`<...>` になっている 3 箇所だけ**実値に置き換えます。
+
+```bash
+open -e .env.local     # macOS。テキストエディットで開きます
+```
+
+> `.env.local` は**先頭がドットの隠しファイル**なので Finder には出てきません。
+> 上のコマンドで開くのが確実です。
 
 | キー | 何を入れるか |
 |---|---|
 | `SLACK_BOT_TOKEN` | B-4 で控えた Bot User OAuth Token |
 | `NOTION_API_TOKEN` | A-1 で控えた Internal Integration Token |
 | `NOTION_TASK_DATABASE_ID` | A-3 で控えた 32 桁 |
-| `REQUEST_SECRET` | C-4 で出た 64 桁 |
 
-残り(`NOTION_ASSIGNEE_USER_ID` / `ALLOWED_SLACK_USER_ID` / `TARGET_REACTION` /
+`REQUEST_SECRET` は `env:init` が生成済みです。残り
+(`NOTION_ASSIGNEE_USER_ID` / `ALLOWED_SLACK_USER_ID` / `TARGET_REACTION` /
 `TARGET_CHANNEL_ID` / `TARGET_CHANNEL_NAME`)は**確定値が入っているのでそのままで OK** です。
 
+入力できたか確認します(**値は表示されません**):
+
+```bash
+npm run env:check
+```
+
+`✓ 必須項目はすべて設定済みです` が出れば次へ進めます。
+
 > `.env.local` は `.gitignore` 済みです。コミットされません。
+>
+> 確認を `node -e "..."` のワンライナーで代用しないでください。**zsh はダブルクォート内の
+> `!` を履歴展開として解釈する**ため、`if (!x)` を含むワンライナーが
+> `zsh: event not found` で落ちます(実際に踏みました)。`npm run env:check` を使ってください。
 
 #### C-6. コードとプロパティを GAS へ push
 
@@ -277,20 +308,37 @@ npm run url:full
 https://script.google.com/macros/s/AKfycb.../exec?secret=0a1b2c...
 ```
 
-> 端末に秘密が表示されます。画面共有中は `npm run url`(secret を伏せる)を使ってください。
+> **端末に秘密が表示されます。** 出力を貼り付け・共有しないでください。
+> 画面共有中は `npm run url`(secret を伏せる)を使ってください。
+> クリップボードへ直接送るのが安全です:
+> ```bash
+> npm run url:full | tail -1 | tr -d ' ' | pbcopy
+> ```
 
 ### E. Slack に Request URL を登録する(あなたの手作業 ⑧)
 
-1. Slack App 管理画面 → 左メニュー **App Manifest** → **YAML** タブ
-2. `slack-app-manifest.with-events.yml` の中身を貼り、**`request_url:` の 1 行だけ**を
-   `npm run url:full` の出力に置き換えます。
-3. **Save Changes**。数秒で検証が通れば URL verification 成功です。
-4. 上部の **「Reinstall your app」** を押します。
+**画面で設定するのが確実です**(実環境ではこちらで通しました):
 
-> 画面で設定してもかまいません: Event Subscriptions → Enable Events ON →
-> Request URL を貼る → Subscribe to bot events に `reaction_added` → Save → Reinstall。
+1. https://api.slack.com/apps → 作ったアプリ → 左メニュー **Event Subscriptions**
+2. **Enable Events** を **オン**
+3. **Request URL** に `npm run url:full` の URL を貼る(上のクリップボード経由が安全)
+4. 数秒で **Verified ✓** になるのを確認
+5. **Subscribe to bot events** を開く → **`Add Bot User Event`** → `reaction_added` を追加
+6. **Save Changes**
+7. 上部に出る **「Reinstall your app」** を押して許可
 
+> ⚠ **手順 5 は必須です。** マニフェスト①には `event_subscriptions` を入れていないため
+> (アプリ作成時点では GAS の URL が無く、URL 検証で弾かれるため)、
+> **`reaction_added` は最初 "No events added yet." の状態です。**
+> ここを飛ばすと Verified ✓ になっても 📥 を押して何も起きません。
+
+<details>
+<summary>マニフェストで設定する場合(任意)</summary>
+
+`slack-app-manifest.with-events.yml` の `request_url:` の 1 行だけを
+`npm run url:full` の出力に置き換え、**App Manifest → YAML** タブに貼って Save。
 **書き換えたマニフェストをコミットしないでください**(秘密を含む URL になります)。
+</details>
 
 ---
 
@@ -502,11 +550,23 @@ Slack 認証 / 対象チャンネルの読み取り可否 / Notion DB の取得 
 
 ### 手順 2: `testDryRun` — 書き込まずに通す
 
-1. `#6-attracting` の適当なメッセージで「リンクをコピー」。
-2. `.env.local` に `TEST_MESSAGE_URL=<その URL>` を追記 → `npm run props:push` →
-   エディタで `setupPropertiesFromEnvLocal` を再実行 → `npm run props:clean`
-   (1 個だけなら GAS の設定画面に直接足しても構いません)
-3. エディタで **`testDryRun`** を実行。
+1. `#6-attracting` に**テストとわかる文面**で 1 件投稿し、`…` → **リンクをコピー**。
+   (`testRegister` で実際に Notion に登録されるので、あとで判別できる文面にする)
+2. GAS エディタ左の **⚙ プロジェクトの設定** → **スクリプト プロパティ** →
+   **プロパティを追加** で 1 行足します。
+
+   | 左の入力欄(プロパティ) | 右の入力欄(値) |
+   |---|---|
+   | `TEST_MESSAGE_URL` | コピーした Slack リンク |
+
+   > ⚠ **入力欄のラベル自体が「プロパティ」「値」なので間違えやすい箇所です。**
+   > 左に**キー名**(`TEST_MESSAGE_URL`)、右に**URL** を入れます。
+   > 逆に入れると `[NG] スクリプト プロパティ TEST_MESSAGE_URL に ... 設定してください` が出ます。
+   > 既存の 9 件(`SLACK_BOT_TOKEN` など)と同じ並びに見えるかを目安にしてください。
+
+   → **スクリプト プロパティを保存**
+
+3. エディタに戻り **`testDryRun`** を実行。
 
 実行ログに **Notion へ送る予定の JSON がそのまま出ます**。
 タイトル・担当者・テキストの中身をここで目視確認してください。Notion には何も書き込まれません。
