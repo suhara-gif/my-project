@@ -16,3 +16,4 @@
 | [20260730-gas-dopost-no-headers-slack-retry.md](20260730-gas-dopost-no-headers-slack-retry.md) | GAS の `doPost` はHTTPヘッダを読めない。Webhookは「速く返す」でなく「冪等」で守る |
 | [20260731-two-system-setup-dependency-cycle.md](20260731-two-system-setup-dependency-cycle.md) | 2サービスの設定が相互依存したら、定義ファイルを循環の切れ目で2段に割る |
 | [20260731-gas-push-does-not-deploy.md](20260731-gas-push-does-not-deploy.md) | `clasp push` は本番を更新しない。「直したのに直らない」は配信中バージョンを疑う |
+| [20260731-attribute-state-change-with-control-experiment.md](20260731-attribute-state-change-with-control-experiment.md) | 「別の何かが書き換えている」は終状態でなく、放置対照実験(時間軸)で判定する |
