@@ -1,0 +1,6 @@
+# clasp が GAS へ push するファイルを、明示した3つだけに限定する。
+# (README や .env.example を GAS プロジェクトに送らないため)
+**/**
+!appsscript.json
+!slack_inbox_to_notion.gs
+!setup.local.gs

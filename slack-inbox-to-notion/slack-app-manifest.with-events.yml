@@ -1,0 +1,51 @@
+# Slack App マニフェスト ②(Request URL 登録用 / GAS のデプロイ後に使います)
+#
+# 使い方:
+#   Slack App 管理画面 → 左メニュー App Manifest → YAML タブ
+#   → この中身を貼って Save Changes
+#   → 上部に出る「Reinstall your app」を押す
+#
+# ★貼る前に 1 行だけ書き換えてください★
+#   settings.event_subscriptions.request_url の <...> を、
+#   ローカルで `npm run url:full` を実行して出た URL に丸ごと置き換える。
+#   出力例(値はダミー):
+#     https://script.google.com/macros/s/AKfycbxxxx.../exec?secret=0a1b2c...
+#
+# 注意:
+#   ・秘密情報を含む URL になります。書き換えた状態でコミットしないでください
+#     (このファイルは placeholder のまま Git に置く)。
+#   ・貼った瞬間に Slack が challenge を投げます。GAS のデプロイが済んでいないと失敗します。
+#   ・?secret= の値は GAS のスクリプト プロパティ REQUEST_SECRET と一致している必要があります。
+#
+# マニフェストを使わず画面で設定してもかまいません:
+#   Event Subscriptions → Enable Events ON → Request URL に上記URLを貼る
+#   → Subscribe to bot events に reaction_added を追加 → Save Changes → Reinstall
+
+display_information:
+  name: Slack INBOX to Notion
+  description: 📥 を押したメッセージを Notion タスクDBに INBOX として登録します
+  background_color: "#2b3137"
+
+features:
+  bot_user:
+    display_name: inbox-to-notion
+    always_online: false
+
+oauth_config:
+  scopes:
+    bot:
+      - channels:history
+      - groups:history   # プライベートチャンネルの本文取得(不要なら削除可)
+      - reactions:read
+      - users:read
+
+settings:
+  event_subscriptions:
+    # ↓↓↓ ここだけ npm run url:full の出力に置き換える ↓↓↓
+    request_url: <npm run url:full の出力をそのまま貼る>
+    # ↑↑↑ ここだけ ↑↑↑
+    bot_events:
+      - reaction_added
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
