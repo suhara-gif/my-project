@@ -16,3 +16,5 @@
   因果を推論する前に、対照試験を1本入れる。
 - [20260810-decision-rules-must-outlive-the-session.md](20260810-decision-rules-must-outlive-the-session.md) — 会話で
   合意した判断規則は次のセッションに残らない。ファイルに書き、非対話経路でも成立するか確認する。
+- [20260810-path-scoped-rules-beat-nested-claude-md.md](20260810-path-scoped-rules-beat-nested-claude-md.md) — 規則の
+  置き場所はディレクトリ名でなく「実際に適用されるファイル集合」で決める。範囲が跨るなら `paths:` を使う。

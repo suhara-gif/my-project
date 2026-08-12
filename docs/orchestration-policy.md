@@ -57,5 +57,7 @@ allow rule matches」)。**このリポジトリの実行経路の多くはこ�
 ## この規則自体の保守
 
 - 判定を誤った実例が出たら `docs/learnings/` に1件足し、上の必須条件を書き換える。
-- CLAUDE.md 側はポインタ4行に留める。CLAUDE.md は 200 行以内が自リポジトリの上限で、
-  現在196行。**次にルールを足すときはディレクトリ階層での分割が先**(提案は PR #39 本文)。
+- CLAUDE.md 側はポインタ4行に留める。CLAUDE.md の 200 行上限は自リポジトリの規約であり、
+  公式ガイダンスとも一致する(「target under 200 lines per CLAUDE.md file」
+  https://code.claude.com/docs/en/memory)。分割済みで現在144行。
+  次に増える分は `.claude/rules/` に `paths:` 付きで置くことを先に検討する。
