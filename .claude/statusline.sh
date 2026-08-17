@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# コンテキスト使用率を常時表示する statusline (任意・未接続)
+# コンテキスト使用率とキャッシュ効率を常時表示する statusline (任意・未接続)
 #
 # なぜこれが要るか:
 #   セッションが膨らむ根本原因は「膨らんでいることが見えない」こと。
 #   フックは閾値を超えたときしか鳴らないが、これは常に見える。
+#
+#   cache read/write の表示は思いつきではなく公式推奨: 公式ドキュメントは
+#   「キャッシュ性能を確認する最も直接的な方法は、current_usage を読む statusline」
+#   と明記している。
+#   出典: https://code.claude.com/docs/en/prompt-caching#check-cache-performance
 #
 # 有効化(自分で選ぶこと。既存の statusline があれば上書きになる):
 #   ~/.claude/settings.json に
@@ -15,6 +20,10 @@
 #
 # 使用フィールドは公式ドキュメントで確認済みのもののみ:
 #   context_window.used_percentage / .context_window_size / .total_input_tokens
+#   context_window.current_usage.cache_read_input_tokens
+#   context_window.current_usage.cache_creation_input_tokens
+#   (current_usage はセッション開始直後と /compact 直後は null になりうるため、
+#    その間はキャッシュ欄を省略しコンテキストバーのみ表示する)
 #
 # 移植性: macOS(bash 3.2 / BSD)と Linux(GNU)の双方で動く構成のみ使用。
 set -euo pipefail
@@ -45,4 +54,20 @@ else
   label='ctx'
 fi
 
-printf '%s [%s] %s%%\n' "$label" "$bar" "$pct"
+line="$(printf '%s [%s] %s%%' "$label" "$bar" "$pct")"
+
+is_num() {
+  case "${1:-}" in
+    '' | *[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+wr="$(printf '%s' "$payload" | jq -r '.context_window.current_usage.cache_creation_input_tokens // empty' 2>/dev/null || true)"
+rd="$(printf '%s' "$payload" | jq -r '.context_window.current_usage.cache_read_input_tokens // empty' 2>/dev/null || true)"
+
+if is_num "$wr" && is_num "$rd"; then
+  line="$(printf '%s | cache w:%sK r:%sK' "$line" "$((wr / 1000))" "$((rd / 1000))")"
+fi
+
+printf '%s\n' "$line"
