@@ -25,4 +25,4 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck claude-backup/*.sh
           shellcheck second-brain/*.sh
-          shellcheck .claude/statusline.sh .claude/hooks/*.sh
+          shellcheck .claude/*.sh .claude/hooks/*.sh
