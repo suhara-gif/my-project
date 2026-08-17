@@ -20,6 +20,10 @@ set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_REL='.claude/hooks/session-size-guard.sh'
+# settings.json へ**リテラルとして**書き込む文字列。${CLAUDE_PROJECT_DIR:-.} は
+# インストール時ではなく、フック実行時に Claude Code 側で展開されなければならない。
+# 二重引用符にすると導入元のパスが焼き付いて導入先で壊れるため、単一引用符が正しい。
+# shellcheck disable=SC2016
 HOOK_CMD='bash "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-size-guard.sh" 2>/dev/null || true'
 
 usage() {
