@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-size-guard.sh\" 2>/dev/null || true",
+            "timeout": 5,
+            "statusMessage": "セッション規模を確認中"
+          }
+        ]
+      }
+    ]
+  }
+}
