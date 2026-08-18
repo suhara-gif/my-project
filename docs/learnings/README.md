@@ -8,4 +8,11 @@
   (学びノートの無い解決は未完了とみなす)。
 - ファイル名は `<YYYYMMDD>-<短いスラッグ>.md`(例 `20260711-bsd-date-portability.md`)。
 
-まだ実際の解決ノートはありません。最初の非自明な問題を解いたら、その場で1件追加してください。
+## 収録ノート
+
+- [20260712-launchd-cron-path-not-inherited.md](20260712-launchd-cron-path-not-inherited.md)
+  — launchd/cron は最小 PATH でジョブを起動するため、`command -v` 単独依存だと本番だけ CLI が見つからない。
+- [20260809-absence-of-evidence-needs-a-control.md](20260809-absence-of-evidence-needs-a-control.md)
+  — 不在証拠（Xが無い）から因果を語る前に「正常時にXは有ったか」を確認する対照試験を1本入れる。
+- [20260817-promote-only-after-listing-assumptions.md](20260817-promote-only-after-listing-assumptions.md)
+  — 観察を推奨アクション・断定・数値へ昇格させる前に、依存する前提を列挙し確認済みかを付す。

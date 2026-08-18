@@ -5,12 +5,14 @@ on:
     paths:
       - 'claude-backup/**.sh'
       - 'second-brain/**.sh'
+      - '.claude/**.sh'
       - '.github/workflows/shellcheck.yml'
   push:
     branches: [main]
     paths:
       - 'claude-backup/**.sh'
       - 'second-brain/**.sh'
+      - '.claude/**.sh'
 
 jobs:
   shellcheck:
@@ -23,3 +25,4 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck claude-backup/*.sh
           shellcheck second-brain/*.sh
+          shellcheck .claude/*.sh .claude/hooks/*.sh
