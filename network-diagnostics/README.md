@@ -35,7 +35,11 @@ macOSでは`system_profiler`(標準搭載)、Linuxでは`iw`(未インストー�
 5. **DNS**: ルーター(=ゲートウェイIPと仮定)・1.1.1.1・8.8.8.8 への応答時間
    (標準ライブラリの`socket`だけで自前UDPクエリを投げるので `dig` 不要)
 6. **スループット**: 単一接続ダウンロードと6並列ダウンロード
-   (既定はCloudflareのspeed testエンドポイント。`--throughput-url`で変更可)
+   (既定は日本国内(Linode Tokyo)の非WAF静的ファイル。CloudflareのSpeed Testは
+   Python製クライアントをボット判定で403にすることがあり、User-Agent偽装では
+   回避できないため使っていない。また遠いリージョンのファイルだと長いRTTで
+   単一接続スループットがTCPウィンドウで頭打ちになり、単一/並列比較が歪む点にも
+   注意。`--throughput-url`で別の静的ファイルホストに変更可)
 7. **バッファブロート**: `networkQuality -v` のRPMとアイドル遅延(macOSのみ)
 
 失敗したセクションは結果を止めずに `"error"` として記録される。Wi-Fiの

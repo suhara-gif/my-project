@@ -30,7 +30,12 @@ from pathlib import Path
 IS_MACOS = platform.system() == "Darwin"
 IS_LINUX = platform.system() == "Linux"
 
-DEFAULT_THROUGHPUT_URL = "https://speed.cloudflare.com/__down?bytes={bytes}"
+# CloudflareのSpeed TestエンドポイントはWAF/ボット判定でPython製クライアントを
+# 403で弾くことがあり(User-Agent偽装だけでは回避不可)、しかも日本以外のリージョンだと
+# 長いRTTのせいで単一接続スループットがTCPウィンドウで頭打ちになり「単一 vs 6並列」の
+# 比較が歪む。WAFの無い日本国内の静的ファイルホスト(Linode Tokyo)をデフォルトにする。
+# 動かない場合は --throughput-url で他の静的ファイルホストに差し替えること。
+DEFAULT_THROUGHPUT_URL = "https://speedtest.tokyo2.linode.com/100MB-tokyo2.bin"
 
 
 def run(cmd, timeout=15):
