@@ -340,7 +340,13 @@ def get_dns_info(gateway_ip, hostname="example.com"):
 
 def download_bytes(url, max_bytes, timeout):
     import urllib.request
-    req = urllib.request.Request(url, headers={"User-Agent": "net-diag/1.0"})
+    # CloudflareなどのCDNはボット判定で素のUser-Agentを403で弾くことがあるため、
+    # 一般的なブラウザに偽装する (実測目的のみで、正当なアクセス)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+    }
+    req = urllib.request.Request(url, headers=headers)
     total = 0
     start = time.perf_counter()
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -406,19 +412,36 @@ def get_bufferbloat_info():
         return {"supported": True, "error": err, "raw": out}
 
     result = {"supported": True, "raw": out}
-    ul = re.search(r"Uplink Responsiveness:\s*(\S+)\s*\((\d+)\s*RPM\)", out)
-    dl = re.search(r"Downlink Responsiveness:\s*(\S+)\s*\((\d+)\s*RPM\)", out)
     ulcap = re.search(r"Uplink capacity:\s*([\d.]+)\s*Mbps", out)
     dlcap = re.search(r"Downlink capacity:\s*([\d.]+)\s*Mbps", out)
-    idle = re.search(r"Idle Latency:\s*([\d.]+)\s*m", out, re.IGNORECASE)
-
-    result["uplink_responsiveness_category"] = ul.group(1) if ul else None
-    result["uplink_rpm"] = int(ul.group(2)) if ul else None
-    result["downlink_responsiveness_category"] = dl.group(1) if dl else None
-    result["downlink_rpm"] = int(dl.group(2)) if dl else None
     result["uplink_capacity_mbps"] = float(ulcap.group(1)) if ulcap else None
     result["downlink_capacity_mbps"] = float(dlcap.group(1)) if dlcap else None
+
+    # macOS Sequoia以降のフォーマット (SUMMARYブロック):
+    #   Responsiveness: Low (442.752 milliseconds | 135 RPM)
+    #   Idle Latency: 58.468 milliseconds | 1026 RPM
+    # 負荷時(Responsiveness)とアイドル時(Idle Latency)でRPMが別々に出る。
+    # 負荷時RPMが低い(=負荷時に遅延が跳ね上がる)のがバッファブロートの典型パターン。
+    resp = re.search(r"Responsiveness:\s*(\S+)\s*\(([\d.]+)\s*milliseconds\s*\|\s*(\d+)\s*RPM\)", out)
+    idle = re.search(r"Idle Latency:\s*([\d.]+)\s*milliseconds\s*\|\s*(\d+)\s*RPM", out)
+    result["responsiveness_category"] = resp.group(1) if resp else None
+    result["responsiveness_loaded_latency_ms"] = float(resp.group(2)) if resp else None
+    result["responsiveness_rpm"] = int(resp.group(3)) if resp else None
     result["idle_latency_ms"] = float(idle.group(1)) if idle else None
+    result["idle_latency_rpm"] = int(idle.group(2)) if idle else None
+
+    # 旧フォーマット (macOS Ventura/Sonoma): Uplink/Downlinkが別々に出る場合のフォールバック
+    if not resp:
+        ul = re.search(r"Uplink Responsiveness:\s*(\S+)\s*\((\d+)\s*RPM\)", out)
+        dl = re.search(r"Downlink Responsiveness:\s*(\S+)\s*\((\d+)\s*RPM\)", out)
+        result["uplink_responsiveness_category"] = ul.group(1) if ul else None
+        result["uplink_rpm"] = int(ul.group(2)) if ul else None
+        result["downlink_responsiveness_category"] = dl.group(1) if dl else None
+        result["downlink_rpm"] = int(dl.group(2)) if dl else None
+    if not idle:
+        idle_old = re.search(r"Idle Latency:\s*([\d.]+)\s*m", out, re.IGNORECASE)
+        result["idle_latency_ms"] = float(idle_old.group(1)) if idle_old else None
+
     return result
 
 

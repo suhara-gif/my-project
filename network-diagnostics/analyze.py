@@ -146,6 +146,8 @@ def lines_throughput(d):
     th = d.get("throughput", {})
     if th.get("skipped"):
         return ["- [未検証] スループット計測をスキップした"]
+    if th.get("error"):
+        return [f"- [未検証] スループット計測失敗: {th['error']}"]
     out = []
     single = th.get("single_connection", {})
     par = th.get("parallel", {})
@@ -169,14 +171,25 @@ def lines_bufferbloat(d):
         return ["- [未検証] バッファブロート計測をスキップした"]
     if not bb.get("supported"):
         return [f"- [未検証] {bb.get('note', 'networkQuality が使えない環境')}"]
+
+    # macOS Sequoia以降は負荷時Responsivenessとアイドル時Idle Latencyで別々にRPMが出る。
+    # 旧フォーマット(Uplink/Downlink別)しか無いJSONへは後方互換でフォールバックする。
+    resp_cat = bb.get("responsiveness_category") or bb.get("downlink_responsiveness_category")
+    resp_rpm = bb.get("responsiveness_rpm") if bb.get("responsiveness_rpm") is not None else bb.get("downlink_rpm")
+
     out = [
-        f"- [実測] Downlink Responsiveness: {bb.get('downlink_responsiveness_category')} ({fmt(bb.get('downlink_rpm'),'RPM',0)})",
-        f"- [実測] Uplink Responsiveness: {bb.get('uplink_responsiveness_category')} ({fmt(bb.get('uplink_rpm'),'RPM',0)})",
-        f"- [実測] Idle Latency: {fmt(bb.get('idle_latency_ms'),'ms')}",
+        f"- [実測] Responsiveness(負荷時): {resp_cat} ({fmt(resp_rpm,'RPM',0)}, {fmt(bb.get('responsiveness_loaded_latency_ms'),'ms')})",
+        f"- [実測] Idle Latency(アイドル時): {fmt(bb.get('idle_latency_ms'),'ms')} ({fmt(bb.get('idle_latency_rpm'),'RPM',0)})",
+        f"- [実測] Downlink容量: {fmt(bb.get('downlink_capacity_mbps'),'Mbps')} / Uplink容量: {fmt(bb.get('uplink_capacity_mbps'),'Mbps')}",
     ]
-    cats = [c for c in (bb.get("downlink_responsiveness_category"), bb.get("uplink_responsiveness_category")) if c]
-    if any(c.lower() in ("low", "poor") for c in cats):
-        out.append("- [推測] Responsivenessが低カテゴリ → バッファブロートの疑い。速度が出ていても体感が悪くなる典型パターン")
+    if resp_cat and resp_cat.lower() in ("low", "poor"):
+        out.append("- [推測] 負荷時Responsivenessが低カテゴリ → バッファブロートの疑い。速度が出ていても体感が悪くなる典型パターン")
+    idle_rpm, load_rpm = bb.get("idle_latency_rpm"), resp_rpm
+    if idle_rpm and load_rpm and load_rpm < idle_rpm * 0.5:
+        out.append(
+            f"- [実測] アイドル時RPM({idle_rpm})に対し負荷時RPM({load_rpm})が半分未満に低下 "
+            "→ 回線が混雑すると遅延が急増するバッファブロートの典型的な数値パターン"
+        )
     return out
 
 
