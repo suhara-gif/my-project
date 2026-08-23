@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "deny": [
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(sudo:*)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(~/.ssh/**)"
+    ]
+  },
   "hooks": {
     "UserPromptSubmit": [
       {

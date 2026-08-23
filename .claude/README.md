@@ -66,6 +66,54 @@ export CLAUDE_SESSION_LOUD_ENTRIES=800
 でした。つまり毎ターン72万トークンを読み直していた計算です。既定値はここから置いた暫定値なので、
 実際の表示を見て調整してください。
 
+## セッション権限ガード（permissions.deny・有効・自動）
+
+`settings.json` に `permissions.deny` を設定し、このリポジトリを開く全セッション
+（ローカル・リモート問わず）で以下を拒否しています。
+
+```json
+"deny": [
+  "Bash(curl:*)", "Bash(wget:*)", "Bash(sudo:*)",
+  "Read(.env)", "Read(.env.*)", "Read(~/.ssh/**)"
+]
+```
+
+あわせて `permissions.disableBypassPermissionsMode: "disable"` で `bypassPermissions`
+モードの使用自体を禁止しています。
+
+**なぜ要るか**: 2026年、メルカリ社の社内発表（Claude Code Meetup Japan #4）が
+「危険な操作をpermissions設定でブロックする」構成をSNS上で広く共有し、この構成を
+このリポジトリにも取り入れるべきか検討しました。ただし元のSNS投稿のJSONスニペットを
+そのまま転記するのではなく、**公式ドキュメント（[Configure permissions](https://code.claude.com/docs/en/permissions)）
+に照合して初めて分かった誤りを修正して**います。
+
+- 元投稿の `"Bash(curl:)"` `"Bash(wget:)"` `"Bash(sudo:)"` `"Bash(rm:)"` は、末尾に
+  ワイルドカードが無いため**引数付きの実際の呼び出しを一切ブロックしません**
+  （`Bash(curl:)` は完全一致・無引数の `curl` にしかマッチせず、`curl https://...` は
+  素通りする）。公式ドキュメント曰く「`:*` サフィックスは末尾ワイルドカードの同義表現」
+  なので、必ず `Bash(curl:*)` のように `*` を付ける必要があります。SNS転載時に
+  アスタリスクが（イタリック記法と誤認されて）欠落したとみられます。
+- 同様に `Read(.env.)` `Read(/.ssh/)` も末尾のワイルドカード欠落。正しくは
+  `Read(.env)`（gitignore方式で任意深度の `.env` に一致。`.env.local` 等の別名は
+  別途 `Read(.env.*)` が要る）と `Read(~/.ssh/**)`。
+
+**意図的に入れていないもの**: `git push` と `rm` を ask/deny には含めていません。
+理由は実測で確認済みです——このリポジトリはリモート（クラウド）セッションでは
+`~/.claude/settings.json`（個人設定）が届かず、この `.claude/settings.json` だけが
+**全セッションに直接効きます**（[他リポジトリへの配布](#他リポジトリへの配布install-to.sh)節参照）。
+一方でこのリポジトリのセッションは「コミットしてpushする」ことをタスクの一部として
+要求されることがあり、`permission_mode: auto` のようなプロンプトを出せないセッションで
+`ask` ルールにマッチした呼び出しは、公式ドキュメント上「実行されない（ブロックされる）」
+挙動になりえます。つまり `git push` を ask にすると、このリポジトリの自動化フロー
+そのものを止めかねません。個人の対話セッションだけ厳しくしたい場合は、共有ファイルでは
+なく個人の `~/.claude/settings.json`（または gitignore 対象の `.claude/settings.local.json`）
+に書くべきです。[要確認: そちらを別途用意したいかはユーザーの意図次第]
+
+[要確認] `Read(~/.ssh/**)` の具体例は公式ドキュメントの取得済みテキストで直接引用は
+できていません（gitignore方式の一般的な `**` 再帰マッチとして妥当と判断）。curl/wget/sudo
+の deny は本リポジトリ内の全スクリプト（`claude-backup/` `second-brain/` `company/`
+`fable5-agent-system/`）を横断してgrepし、現状使用が無いことを確認したうえで追加しています。
+
 ## コンテキスト使用率とキャッシュ効率の常時表示（任意・未接続）
 
 `statusline.sh` は現在のコンテキスト使用率をバーで表示し、あわせて直近ターンの
