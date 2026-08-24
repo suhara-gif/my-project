@@ -1,7 +1,8 @@
 # マステック神戸（マツダ自動車整備専門学校 神戸）打ち合わせ準備メモ
 
 - 日付: 2026-08-24
-- 資料本体（Artifact）: https://claude.ai/code/artifact/7f61db81-4be3-4aa9-9bc1-33e0bf2e99e9
+- 社内用 準備メモ（Artifact）: https://claude.ai/code/artifact/7f61db81-4be3-4aa9-9bc1-33e0bf2e99e9
+- **投影用スライド（Artifact・先方と画面共有する資料）**: https://claude.ai/code/artifact/2bf55d1f-1999-4259-b0bb-cc34b88d0639
 - 元Notion: https://app.notion.com/p/3c164afca07581d9ac49f774a2b25118 ※このページはNATS・北海道案件のもので、マステック神戸とは別案件。社内Notion（整備学校 開拓ハブ）にマステック神戸の商談記録は見当たらなかった。
 
 ## 確定した打ち合わせ情報（メール履歴より）
