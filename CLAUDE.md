@@ -49,7 +49,16 @@
 - 「ルールに書かれている既定動作だから」だけを根拠に、個別ケースの実態(このPRにCIがあるか等)を
   見ずに機械的に繰り返さない。1回目の確認で「見るべきものが無い」と分かった時点で、その場で
   ループの要否を再判定する。
-経緯: [docs/learnings/20260823-recurring-loop-needs-purpose-gate.md](docs/learnings/20260823-recurring-loop-needs-purpose-gate.md)
+- **「監視すべきか」だけでなく「どの間隔で監視すべきか」も見直し対象にする。** CI/レビューが
+  存在し監視自体は妥当なPRでも、既定の「約1時間後にチェックイン」を機械的に守り続けると、
+  人間の実際の反応速度(数時間〜1日以上かかることがある)に対して間隔が短すぎ、無駄な
+  チェックが積み重なることがある(実測: PRのマージまで21時間超かかったのに1時間おきの
+  チェックを続け、そのほぼ全てが「変化なし」だった)。目安として、**5〜6回連続で「変化なし」
+  が続いたら、次回以降の間隔を伸ばす(例: 2〜3倍)ことを検討する。** 初回〜数回は既定の
+  短い間隔を守り(人間がすぐ反応する可能性を早期に拾うため)、それでも動きが無いと分かって
+  から段階的に伸ばす。厳密な倍率は状況依存のため固定しない。
+経緯: [docs/learnings/20260823-recurring-loop-needs-purpose-gate.md](docs/learnings/20260823-recurring-loop-needs-purpose-gate.md)、
+[docs/learnings/20260824-polling-interval-should-track-human-cadence.md](docs/learnings/20260824-polling-interval-should-track-human-cadence.md)
 
 ## 計画・設計
 
