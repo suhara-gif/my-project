@@ -21,7 +21,7 @@ function doGet(e) {
 
 /** クライアントへ渡す問題一覧(正解・解説は含めない) */
 function getQuestionsForClient() {
-  return getQuestionBank().map(function (q) {
+  return getQuestionBank_().map(function (q) {
     return {
       id: q.id,
       category: q.category,
@@ -36,7 +36,7 @@ function getQuestionsForClient() {
  * @param {Object} answers { "問題id(文字列)": 選択した選択肢のindex }
  */
 function submitAnswers(answers) {
-  var bank = getQuestionBank();
+  var bank = getQuestionBank_();
   var total = bank.length;
   var pointsPerQuestion = 100 / total;
   var correctCount = 0;
