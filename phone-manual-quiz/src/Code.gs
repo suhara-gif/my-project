@@ -9,7 +9,7 @@
  * セットアップは docs/setup.md を参照。
  */
 
-var PASS_SCORE = 80; // 合格基準(100点満点中)
+var PASS_SCORE = 90; // 合格基準(100点満点中)
 
 function doGet(e) {
   var template = HtmlService.createTemplateFromFile('Index');
