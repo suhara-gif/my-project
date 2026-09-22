@@ -1,8 +1,3 @@
 {
-  "mcpServers": {
-    "financial-datasets": {
-      "type": "http",
-      "url": "https://mcp.financialdatasets.ai"
-    }
-  }
+  "mcpServers": {}
 }
