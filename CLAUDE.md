@@ -12,6 +12,7 @@
 | [`second-brain/`](second-brain/) | Obsidian vault をセカンドブレイン化するキット。詳細ルールは [`second-brain/vault-template/CLAUDE.md`](second-brain/vault-template/CLAUDE.md) |
 | [`company/`](company/) | AI秘書「アプ子」(`/up`, `/my-secretary`)まわりの設定・ナレッジ・日報 |
 | [`phone-manual-quiz/`](phone-manual-quiz/) | 電話コミュニケーション基本マニュアルの理解度テスト(GAS製Webアプリ)。詳細は [`phone-manual-quiz/README.md`](phone-manual-quiz/README.md) |
+| [`slack-notion-archiver/`](slack-notion-archiver/) | Slack のメッセージを Notion DB に保存する GAS のソース控え。詳細は [`slack-notion-archiver/README.md`](slack-notion-archiver/README.md) |
 | [`fable5-agent-system/`](fable5-agent-system/) | Claude API 上の自己改善型エージェントシステムの実装(Python) |
 | [`docs/learnings/`](docs/learnings/) | 非自明な問題を解いたときの学びノート置き場(リポジトリ横断) |
 | [`.claude/skills/`](.claude/skills/) | このリポジトリで使うカスタムスキル |
