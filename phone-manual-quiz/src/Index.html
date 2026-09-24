@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px 64px;
+      color: #222;
+      background: #fafafa;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .user { color: #666; font-size: 13px; margin-top: 0; }
+    #intro p { line-height: 1.7; }
+    button {
+      background: #2b6cb0;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:disabled { background: #a0aec0; cursor: default; }
+    .question {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .qtitle { font-weight: bold; margin: 0 0 8px; }
+    .choice {
+      display: block;
+      padding: 6px 0;
+      cursor: pointer;
+    }
+    #submitBtn { margin-top: 8px; }
+    #loading { color: #666; margin-top: 12px; }
+    #result h2 { font-size: 18px; }
+    .feedback {
+      background: #ebf8ff;
+      border: 1px solid #bee3f8;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 12px 0;
+      white-space: pre-line;
+    }
+    .wrong-item {
+      background: #fff5f5;
+      border: 1px solid #fed7d7;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+    }
+    .wq { font-weight: bold; margin: 0 0 6px; }
+    .explanation { color: #555; font-size: 13px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>電話コミュニケーション理解度テスト</h1>
+      <p class="user">ログイン中: <?= userEmail ?></p>
+    </header>
+
+    <div id="intro">
+      <p>「電話コミュニケーション基本マニュアル」の内容について、全20問(4択)でテストします。</p>
+      <p>100点満点中90点以上で合格です。誤答した問題は、あとで章ごとに復習アドバイスが表示されます。</p>
+      <button id="startBtn">テストを始める</button>
+    </div>
+
+    <form id="quizForm" style="display:none;"></form>
+    <button id="submitBtn" style="display:none;">回答を送信する</button>
+
+    <div id="loading" style="display:none;">読み込み中です…</div>
+    <div id="result" style="display:none;"></div>
+  </div>
+
+  <script>
+    document.getElementById('startBtn').addEventListener('click', function () {
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('intro').style.display = 'none';
+      google.script.run.withSuccessHandler(renderQuestions).withFailureHandler(showError).getQuestionsForClient();
+    });
+
+    function renderQuestions(questions) {
+      document.getElementById('loading').style.display = 'none';
+      var form = document.getElementById('quizForm');
+      questions.forEach(function (q, idx) {
+        var block = document.createElement('div');
+        block.className = 'question';
+
+        var qTitle = document.createElement('p');
+        qTitle.className = 'qtitle';
+        qTitle.textContent = (idx + 1) + '. ' + q.question;
+        block.appendChild(qTitle);
+
+        q.choices.forEach(function (choice, cIdx) {
+          var label = document.createElement('label');
+          label.className = 'choice';
+          var input = document.createElement('input');
+          input.type = 'radio';
+          input.name = 'q_' + q.id;
+          input.value = cIdx;
+          label.appendChild(input);
+          label.appendChild(document.createTextNode(' ' + choice));
+          block.appendChild(label);
+        });
+
+        form.appendChild(block);
+      });
+      form.style.display = 'block';
+      document.getElementById('submitBtn').style.display = 'block';
+    }
+
+    document.getElementById('submitBtn').addEventListener('click', function () {
+      var form = document.getElementById('quizForm');
+      var radios = form.querySelectorAll('input[type=radio]');
+      var qids = [];
+      var answers = {};
+      radios.forEach(function (r) {
+        var qid = r.name.replace('q_', '');
+        if (qids.indexOf(qid) === -1) qids.push(qid);
+        if (r.checked) answers[qid] = parseInt(r.value, 10);
+      });
+      var unanswered = qids.filter(function (qid) { return !(qid in answers); });
+      if (unanswered.length > 0) {
+        alert('未回答の問題があります(残り' + unanswered.length + '問)。すべて回答してから送信してください。');
+        return;
+      }
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('loading').style.display = 'block';
+      google.script.run.withSuccessHandler(renderResult).withFailureHandler(showError).submitAnswers(answers);
+    });
+
+    function renderResult(result) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('quizForm').style.display = 'none';
+      document.getElementById('submitBtn').style.display = 'none';
+
+      var el = document.getElementById('result');
+      var html = '';
+      html += '<h2>結果: ' + result.score + '点 / 100点(' + (result.pass ? '合格' : '不合格') + ')</h2>';
+      html += '<p>正答 ' + result.correctCount + ' / ' + result.total + '問(合格ライン ' + result.passScore + '点)</p>';
+      html += '<div class="feedback">' + escapeHtml(result.feedback).replace(/\n/g, '<br>') + '</div>';
+
+      if (result.wrongDetails.length > 0) {
+        html += '<h3>誤答した問題</h3>';
+        result.wrongDetails.forEach(function (d) {
+          html += '<div class="wrong-item">';
+          html += '<p class="wq">' + escapeHtml(d.question) + '</p>';
+          html += '<p>あなたの回答: ' + escapeHtml(d.chosenText) + '</p>';
+          html += '<p>正解: ' + escapeHtml(d.correctText) + '</p>';
+          html += '<p class="explanation">' + escapeHtml(d.explanation) + '</p>';
+          html += '</div>';
+        });
+      }
+      el.innerHTML = html;
+      el.style.display = 'block';
+    }
+
+    function showError(err) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('submitBtn').disabled = false;
+      alert('エラーが発生しました: ' + (err && err.message ? err.message : err));
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str == null ? '' : str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
