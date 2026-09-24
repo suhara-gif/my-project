@@ -2,14 +2,20 @@
 //   無ければBot宛てのDMだけ
 function listTargetConversations() {
   const byId = {};
+  let canJoin = true; // Botに channels:join 権限が無ければ、1回目の失敗以降は試さない
   listAllConversations(CONF.types, CONF.slackBotToken).forEach(c => {
-    if (!c.is_member && c.is_channel && !c.is_private) {
+    if (canJoin && !c.is_member && c.is_channel && !c.is_private) {
       try {
         slackFetch('https://slack.com/api/conversations.join?channel=' + encodeURIComponent(c.id), CONF.slackBotToken);
         c.is_member = true;
         Logger.log(`joined public channel: ${c.name || c.id}`);
       } catch (e) {
-        Logger.log(`join failed: ${c.name || c.id} -> ${e}`);
+        if (String(e).indexOf('missing_scope') >= 0) {
+          canJoin = false;
+          Logger.log('Botに channels:join 権限が無いため、公開チャンネルへの自動参加をスキップします');
+        } else {
+          Logger.log(`join failed: ${c.name || c.id} -> ${e}`);
+        }
       }
     }
     if (!c.is_member && !c.is_im && !c.is_mpim) return;
