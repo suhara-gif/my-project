@@ -2,7 +2,7 @@
 
 - 日付: 2026-09-24
 - 種別: 設計判断 / 調査
-- 触れたファイル: slack-notion-archiver/Code.gs
+- 触れたファイル: slack-notion-archiver/設定と同期.gs, slack-notion-archiver/コード.gs
 
 ## 問題
 Slack → Notion 保存 GAS で「返信と DM も保存したい」と依頼された。元コードは DM(`im`/`mpim`)を
