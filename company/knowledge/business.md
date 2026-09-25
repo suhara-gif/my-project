@@ -100,6 +100,9 @@ CWアカウント(723299057330625)の領収書は**Gmail全期間で1通も存�
 - CWA名義のMeta広告の成果: `ManagementKarwakInflowDate_del__c`（カーワク流入日）＋ `sourceMedium_j_cw__c = 'meta / cpc'` で数える。
   `sourceMedium_j_cwa__c` は2025-06以降 1,342件中0件しか値が入っておらず使えない
 - SFに **Metaのキャンペーン/広告セットIDは無い**ため、キャンペーン別の整備士数は取れない（期間で区切って推定するしかない）
+- トヨワクの整備士イベント `Mechanic_Lead` は GTM(GTM-K65GPM9S) のタグ「Mechanic_Lead」から送信。2026-09-25 にトリガーを
+  「ウィンドウの読み込み」へ修正し、eventID=`mech_会員ID` を付与（9/20〜9/25 は未送信だった）。
+  経緯: [docs/learnings/20260925-gtm-trigger-timing-mechanic-lead.md](../../docs/learnings/20260925-gtm-trigger-timing-mechanic-lead.md)
 - 経緯: [docs/learnings/20260925-meta-sf-mechanic-join.md](../../docs/learnings/20260925-meta-sf-mechanic-join.md)
 
 ## データ基準日のルール（2026-08-09 追加）
