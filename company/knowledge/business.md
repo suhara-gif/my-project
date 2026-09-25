@@ -55,6 +55,9 @@
 ## Meta広告アカウントID（請求メール由来）
 
 - CWA=554737564053673 / TW=1280868240318718 / MW=672794759096495 / OS=677380074929608 / CW=723299057330625
+- ⚠️ 2026-09-25確認: 723299057330625 の管理画面上の名前は「**カーワクシニア**」（Ads MCP未開放）。
+  「カーワクエージェント」アカウント(554737564053673)のピクセルは主に **carworkassist.com（カーワク）** で発火しており
+  （9月: 112,755件。cwa-agent.com は845件のみ）、**CWA名義のMeta広告の登録はSF上ではCW流入として記録される**。
 
 ## 🔑 空欄の読み方（2026-08-09 追加 → 同日 独立検品により全面改訂）
 
@@ -94,6 +97,8 @@ CWアカウント(723299057330625)の領収書は**Gmail全期間で1通も存�
 
 - TW流入日: `Contact.ManagementToyowakuInflowDate_del__c` ／ 参照元: `sourceMedium_j_tw__c`（Metaは `meta / cpc`）
 - 整備士フラグ: **`Field63__c`（整備士判定（カーワク））= '整備士'** を使う。`Field58__c`（整備資格抽出）はほぼ false で使えない
+- CWA名義のMeta広告の成果: `ManagementKarwakInflowDate_del__c`（カーワク流入日）＋ `sourceMedium_j_cw__c = 'meta / cpc'` で数える。
+  `sourceMedium_j_cwa__c` は2025-06以降 1,342件中0件しか値が入っておらず使えない
 - SFに **Metaのキャンペーン/広告セットIDは無い**ため、キャンペーン別の整備士数は取れない（期間で区切って推定するしかない）
 - 経緯: [docs/learnings/20260925-meta-sf-mechanic-join.md](../../docs/learnings/20260925-meta-sf-mechanic-join.md)
 
