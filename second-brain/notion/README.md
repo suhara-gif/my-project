@@ -37,15 +37,20 @@ Notion カスタムエージェントは使わない（課金していないた�
 
 ## 実行役
 
-| 名前 | Routine ID | 予定の頻度 | 指示文 |
-|---|---|---|---|
-| コンパイラ | `trig_01ASjdMcxJFiaNSkqxL1Eabr` | 毎日 3:10（日本時間） | [compiler-prompt.md](compiler-prompt.md) |
-| 庭師 | `trig_01XuoFVhiSJgALBUq7Szm1x8` | 毎週日曜 4:10（日本時間） | [gardener-prompt.md](gardener-prompt.md) |
+| 名前 | Routine ID | 頻度 | モデル | 指示文 |
+|---|---|---|---|---|
+| 第二の脳コンパイラ | `trig_01LPiMhREA3wp61LHyTYFnkz` | 毎日 3:10（日本時間） | Sonnet 5 | [compiler-prompt.md](compiler-prompt.md) |
+| 第二の脳 庭師 | `trig_01NLxDywZjkYYcSrd7LJYTAV` | 毎週日曜 4:10（日本時間） | Sonnet 5 | [gardener-prompt.md](gardener-prompt.md) |
 
-**現状（2026-09-26）: どちらもスケジュール未設定で、Notion の接続も付いていない。**
-Claude Code のセッションから MCP 経由で作った Routine には、コネクタを引き継げない
-（この組織では `connectors` パラメータが使えない）。接続なしで試しに起動したところ、指示どおり何も書き込まずに終了した。
-有効にするには、claude.ai の Routine 画面で各 Routine を開いて Notion コネクタを付け、スケジュールを設定する。
+どちらも須原さんが claude.ai の Routine 画面から作成したもの（2026-09-26）。コネクタは Notion だけで、リポジトリは `suhara-gif/my-project`。
+Routine のプロンプトは「リポジトリ内の指示文ファイルを読んで実行する」という1行だけにしてあり、指示文の正本はこのディレクトリのファイルになる。
+指示文を直すときは、ここのファイルを直して main に入れれば、Routine 側を触らずに次回から反映される。
+
+注意:
+- Claude Code のセッションから MCP 経由で作った Routine には、コネクタを付けられない（この組織では `connectors` パラメータが使えず、画面の編集フォームにもコネクタ欄が出ない）。
+  コネクタが必要な Routine は、画面から作成する。
+- 画面から作った Routine は、エージェント側から「今すぐ実行」も削除もできない。どちらも画面から操作する。
+- プランの週次使用量が上限に達している間は、Routine は起動直後に止まる（Notion には書き込まれない）。
 
 指示文の正本はこのリポジトリ。Routine のプロンプトは、ここからコピーしたもの。
 直すときは、このファイルを直してから Routine のプロンプトを差し替える。
