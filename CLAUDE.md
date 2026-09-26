@@ -9,7 +9,7 @@
 | ディレクトリ | 内容 |
 |---|---|
 | [`claude-backup/`](claude-backup/) | `~/.claude/` をクラウドへ自動退避するシェルキット。詳細ルールは [`claude-backup/CLAUDE.md`](claude-backup/CLAUDE.md) |
-| [`second-brain/`](second-brain/) | Obsidian vault をセカンドブレイン化するキット。詳細ルールは [`second-brain/vault-template/CLAUDE.md`](second-brain/vault-template/CLAUDE.md) |
+| [`second-brain/`](second-brain/) | Obsidian vault をセカンドブレイン化するキット。詳細ルールは [`second-brain/vault-template/CLAUDE.md`](second-brain/vault-template/CLAUDE.md)。**Notion 版（運用中の正本）は [`second-brain/notion/`](second-brain/notion/README.md)**。須原さんの知識・過去の判断を引くときはここに書いた手順で Notion のトピックDBから入る |
 | [`company/`](company/) | AI秘書「アプ子」(`/up`, `/my-secretary`)まわりの設定・ナレッジ・日報 |
 | [`phone-manual-quiz/`](phone-manual-quiz/) | 電話コミュニケーション基本マニュアルの理解度テスト(GAS製Webアプリ)。詳細は [`phone-manual-quiz/README.md`](phone-manual-quiz/README.md) |
 | [`fable5-agent-system/`](fable5-agent-system/) | Claude API 上の自己改善型エージェントシステムの実装(Python) |
