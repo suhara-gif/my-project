@@ -13,6 +13,7 @@
 | [`company/`](company/) | AI秘書「アプ子」(`/up`, `/my-secretary`)まわりの設定・ナレッジ・日報 |
 | [`phone-manual-quiz/`](phone-manual-quiz/) | 電話コミュニケーション基本マニュアルの理解度テスト(GAS製Webアプリ)。詳細は [`phone-manual-quiz/README.md`](phone-manual-quiz/README.md) |
 | [`fable5-agent-system/`](fable5-agent-system/) | Claude API 上の自己改善型エージェントシステムの実装(Python) |
+| [`tomu-log/`](tomu-log/) | 都夢の成長ログ(文章のみ。public のため顔写真・居場所情報は置かない) |
 | [`docs/learnings/`](docs/learnings/) | 非自明な問題を解いたときの学びノート置き場(リポジトリ横断) |
 | [`.claude/skills/`](.claude/skills/) | このリポジトリで使うカスタムスキル |
 
