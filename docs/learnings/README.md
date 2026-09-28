@@ -24,3 +24,5 @@
   — 監視の仕組みは監視対象と同じ壊れ方(ジョブ停止・シート再作成・集計途中の行)をしない形で作る。常に出続ける要確認は先に除外する。
 - [20260928-null-cv-is-not-zero.md](20260928-null-cv-is-not-zero.md)
   — 手作業で投入した日次データは、合計値に加えて列ごとの NULL 件数を数える。NULL に意味を持たせない。
+- [20260928-verify-blocker-before-reporting-it.md](20260928-verify-blocker-before-reporting-it.md)
+  — 「実行できない」と報告する前に実際に1回試す。ffmpeg不在は誤りで、真の壁はネットワークポリシーだった。

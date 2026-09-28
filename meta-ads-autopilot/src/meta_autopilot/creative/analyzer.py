@@ -114,12 +114,52 @@ def to_bq_row(creative_id: str, ad_id: str, account_id: str, f: CreativeFeatures
         "ad_id": ad_id,
         "account_id": account_id,
         **{k: d[k] for k in (
-            "media_type", "duration_sec", "hook_type", "hook_text", "appeal_axis", "benefit", "offer", "cta",
-            "subject_exposure_sec", "subject_exposure_total_sec", "has_person", "person_type", "format_style",
-            "aspect_ratio", "shot_framing", "cuts_per_10s", "has_subtitles", "has_voiceover",
+            "media_type", "analysis_scope", "duration_sec", "hook_type", "hook_text", "appeal_axis",
+            "secondary_appeal_axis", "benefit", "offer", "cta", "subject_exposure_sec", "subject_exposure_total_sec",
+            "has_person", "person_type", "format_style", "aspect_ratio", "shot_framing", "cuts_per_10s",
+            "has_subtitles", "has_voiceover", "notes",
         )},
         "features_json": f.model_dump_json(),
         "analyzer_model": model,
         "analyzer_version": ANALYZER_VERSION,
         "analyzed_at": analyzed_at,
     }
+
+
+_CTA_JA = {
+    "SIGN_UP": "今すぐ登録", "APPLY_NOW": "今すぐ応募", "LEARN_MORE": "詳しくはこちら",
+    "CONTACT_US": "お問い合わせ", "GET_QUOTE": "見積もりを取得", "SEND_MESSAGE": "メッセージを送信",
+    "SUBSCRIBE": "登録する", "DOWNLOAD": "ダウンロード",
+}
+
+
+def analyze_text_only(
+    creative_id: str,
+    *,
+    media_type: str,
+    ad_title: str,
+    ad_body: str,
+    call_to_action_type: str | None,
+    duration_sec: float | None,
+    appeal_axis,
+    benefit: str | None,
+    offer: str | None,
+    notes: str,
+) -> CreativeFeatures:
+    """視覚データに到達できないときの代替解析。
+
+    appeal_axis・benefit・offer は呼び出し側(人間またはこの関数を呼ぶ側のClaude自身)が
+    広告本文・タイトルを読んで判断した値を渡す — この関数自体は分類ロジックを持たない
+    (誤って自動分類が機能しているように見せないため)。cta だけは Meta の call_to_action_type
+    という構造化フィールドから確定的に埋める(推測ではない)。
+    """
+    return CreativeFeatures(
+        media_type=media_type,  # type: ignore[arg-type]
+        analysis_scope="text_only",
+        duration_sec=duration_sec,
+        appeal_axis=appeal_axis,
+        benefit=benefit or (ad_body[:120] if ad_body else None),
+        offer=offer,
+        cta=_CTA_JA.get(call_to_action_type or "", call_to_action_type),
+        notes=notes,
+    )

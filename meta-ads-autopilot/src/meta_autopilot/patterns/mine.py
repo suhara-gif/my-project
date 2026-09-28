@@ -71,8 +71,17 @@ def mine_patterns(
     draws: int = 20_000,
     seed: int = 0,
 ) -> list[PatternStat]:
-    """rows は v_creative_performance の行(campaign_id, ad_id, spend, cv, impressions, link_clicks, 特徴量)。"""
+    """rows は v_creative_performance の行(campaign_id, ad_id, spend, cv, impressions, link_clicks, 特徴量)。
+
+    attributes に視覚依存の項目(hook_type/format_style/person_type/shot_framing/aspect_ratio/
+    early_exposure/tempo)が1つでも含まれる場合、analysis_scope='text_only' の行(画素を見ずに
+    本文だけで埋めた行。視覚系の値は全てNULL)は自動的に除外する。含めると「見ていないのに
+    見た目の特徴で勝った」という誤った結論になるため。
+    """
     rows = [r for r in rows if (r.get("spend") or 0) > 0]
+    visual_attrs = {"hook_type", "format_style", "person_type", "shot_framing", "aspect_ratio", "early_exposure", "tempo"}
+    if visual_attrs & set(attributes):
+        rows = [r for r in rows if r.get("analysis_scope", "multimodal") == "multimodal"]
     if not rows:
         return []
     cuts = [r["cuts_per_10s"] for r in rows if r.get("cuts_per_10s") is not None]
