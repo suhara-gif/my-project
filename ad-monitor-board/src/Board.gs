@@ -2,8 +2,8 @@
  * 広告 監視ボード
  *
  * daily_summary(日次・媒体×サイト別の広告実績)の横に「監視ボード」シートを作り、
- * 媒体×サイトごとに「推移の折れ線」「昨日の値」「7日平均比」「空欄の連続日数」
- * 「整備士CPAの変化」「判定」を1行で並べる。
+ * 媒体×サイトごとに「判定」「推移の折れ線」「昨日の値」「7日平均比」「週ごとの比較(改善/悪化)」
+ * 「整備士CPAの2週連続の傾向」「空欄の連続日数」を1行で並べる。
  *
  * - ボードの中身はすべて数式。buildMonitorBoard() を1回実行すれば、以後は daily_summary が
  *   更新されるたびに自動で再計算される(定期実行ジョブは作らない)。
@@ -33,15 +33,28 @@ var MB_CONFIG = {
   SPARK_DAYS: 28, // 折れ線に出す日数
   RATIO_ALERT: 0.5, // 昨日費用が7日平均から ±50% 以上ずれたら要確認
   BLANK_ALERT_DAYS: 2, // 費用が末尾から何日続けて空欄なら要確認
-  MECH_LAG_DAYS: 3, // 整備士数は確定が遅れるため、直近この日数は整備士CPAの計算から外す
-  MECH_WINDOW_DAYS: 7, // 整備士CPAの「今」の集計日数
-  MECH_BASE_DAYS: 14, // 整備士CPAの「比較基準」の集計日数(今の窓の直前)。daily_summary は直近約31日分しか
-  //                    持たないため、LAG + WINDOW + BASE が31日を超えないようにする
-  MECH_CPA_ALERT: 1.5, // 整備士CPAが基準の1.5倍以上なら要確認
+
+  // 週比較。「今週」= 直近 LAG_DAYS 日を除いた7日間、「先週」「先々週」はその前の7日間ずつ。
+  // 整備士数は確定が遅れるため直近を外す。費用・CVも同じ窓で比べる(指標ごとに期間がずれないように)。
+  // daily_summary は直近約31日分しか持たないため、LAG_DAYS + 21 が31を超えないようにする。
+  LAG_DAYS: 3,
+  WEEK_CHANGE: 0.2, // 先週比 ±20% 未満は「横ばい」
+  WEEK_MIN_COUNT: 3, // CV・整備士CVがどちらかの週でこの件数未満なら「件数不足」として改善/悪化を出さない
+  CPA_ALERT: 0.5, // 整備士CPAが先週比 +50% 以上なら要確認
 };
 
 var MB_HEADER_ROWS = 4; // ボード上部の見出しエリアの行数(5行目から明細)
 var MB_TITLE = '広告 監視ボード'; // A1 の見出し。作り直してよいシートかの目印にも使う
+
+// 列の配置。表示列(A〜U)と、週合計を置く非表示の補助列(W〜AE)
+var MB_COLS = {
+  key: 'A', media: 'B', site: 'C', judge: 'D', reason: 'E',
+  costSpark: 'F', costLast: 'G', costRatio: 'H', mechSpark: 'I',
+  costWeek: 'J', costChg: 'K', cvWeek: 'L', cvChg: 'M', mechWeek: 'N', mechChg: 'O',
+  cpaNow: 'P', cpaPrev: 'Q', cpaChg: 'R', trend: 'S', blank: 'T', lastDate: 'U',
+  // 補助列: 今週(0)・先週(1)・先々週(2)の合計
+  c0: 'W', c1: 'X', c2: 'Y', v0: 'Z', v1: 'AA', v2: 'AB', m0: 'AC', m1: 'AD', m2: 'AE',
+};
 
 /** 監視ボードを作る(作り直す)。daily_summary の列構成が変わったときも再実行する */
 function buildMonitorBoard() {
@@ -101,25 +114,37 @@ function mbFindKeys_(headers) {
 
 function mbWriteHeader_(board) {
   var d = mbDateCol_();
+  var C = MB_COLS;
+  var body = function (col) { return col + (MB_HEADER_ROWS + 1) + ':' + col; };
   board.getRange('A1').setValue(MB_TITLE).setFontSize(14).setFontWeight('bold');
   // B3: 判定に使う最終行(日付列の何行目か)。最終行が今日以降なら集計途中とみなして1行戻す
   board.getRange('A3:B3').setValues([['判定に使う行', '=LET(k, COUNTA(' + d + '), v, INDEX(' + d + ', k), ' +
     'dv, IF(ISNUMBER(v), v, DATEVALUE(v)), k - IF(dv >= TODAY(), 1, 0))']]);
   board.getRange('A2:B2').setValues([['基準日(昨日)', '=LET(v, INDEX(' + d + ', B3), IF(ISNUMBER(v), v, DATEVALUE(v)))']]);
   board.getRange('B2').setNumberFormat('yyyy/mm/dd (ddd)');
-  board.getRange('D2:E2').setValues([['要確認', '=COUNTIF(O' + (MB_HEADER_ROWS + 1) + ':O, "要確認")']]);
-  board.getRange('D2:E2').setFontWeight('bold');
-  board.getRange('G2').setValue(
-    '整備士CPAは直近' + MB_CONFIG.MECH_LAG_DAYS + '日を除いた' + MB_CONFIG.MECH_WINDOW_DAYS +
-      '日間と、その前' + MB_CONFIG.MECH_BASE_DAYS + '日間の比較(整備士数の確定遅れを避けるため)'
-  ).setFontColor('#666666');
+  board.getRange('D2:I2').setValues([[
+    '要確認', '=COUNTIF(' + body(C.judge) + ', "要確認")',
+    '整備士CPA 改善', '=COUNTIF(' + body(C.cpaChg) + ', "*改善*")',
+    '整備士CPA 悪化', '=COUNTIF(' + body(C.cpaChg) + ', "*悪化*")',
+  ]]).setFontWeight('bold');
+  // 今週の期間(例: 09/18〜09/24)
+  var day = function (off) {
+    return 'TEXT(LET(v, INDEX(' + d + ', B3 - ' + off + '), IF(ISNUMBER(v), v, DATEVALUE(v))), "mm/dd")';
+  };
+  var wk = function (k) {
+    var endOff = MB_CONFIG.LAG_DAYS + 7 * k;
+    return day(endOff + 6) + ' & "〜" & ' + day(endOff);
+  };
+  board.getRange('K2').setFormula('="今週 " & ' + wk(0) + ' & " ・ 先週 " & ' + wk(1) +
+    ' & "(整備士数の確定遅れを避けるため直近' + MB_CONFIG.LAG_DAYS + '日を除く)"').setFontColor('#666666');
 
   var cols = [
-    'キー', '媒体', 'サイト',
-    '費用 推移(' + MB_CONFIG.SPARK_DAYS + '日)', '昨日 費用', '費用 7日平均比',
-    '整備士 推移(' + MB_CONFIG.SPARK_DAYS + '日)', '昨日 整備士',
-    '整備士CPA(今)', '整備士CPA(基準)', '整備士CPA 比',
-    '費用 空欄日数', '費用 最終入力日', '理由', '判定',
+    'キー', '媒体', 'サイト', '判定', '理由',
+    '費用 推移(' + MB_CONFIG.SPARK_DAYS + '日)', '昨日 費用', '費用 7日平均比', '整備士 推移(' + MB_CONFIG.SPARK_DAYS + '日)',
+    '費用 今週', '費用 先週比', 'CV 今週', 'CV 先週比', '整備士CV 今週', '整備士CV 先週比',
+    '整備士CPA 今週', '整備士CPA 先週', '整備士CPA 先週比', '傾向(2週連続)',
+    '費用 空欄日数', '費用 最終入力日', '',
+    '費用 今週', '費用 先週', '費用 先々週', 'CV 今週', 'CV 先週', 'CV 先々週', '整備士 今週', '整備士 先週', '整備士 先々週',
   ];
   board.getRange(MB_HEADER_ROWS, 1, 1, cols.length).setValues([cols])
     .setFontWeight('bold').setBackground('#eeeeee').setWrap(true);
@@ -128,64 +153,102 @@ function mbWriteHeader_(board) {
 function mbWriteRows_(board, keys, headers) {
   var hasHeader = {};
   headers.forEach(function (h) { hasHeader[String(h).trim()] = true; });
+  var C = MB_COLS;
 
   var rows = keys.map(function (k, i) {
     var r = MB_HEADER_ROWS + 1 + i;
+    var at = function (col) { return col + r; };
     var hasMech = hasHeader[k.key + '_' + MB_CONFIG.METRIC_MECH];
+    var hasCv = hasHeader[k.key + '_' + MB_CONFIG.METRIC_CV];
     var cost = mbCol_('$A' + r, MB_CONFIG.METRIC_COST);
+    var cv = hasCv ? mbCol_('$A' + r, MB_CONFIG.METRIC_CV) : null;
     var mech = hasMech ? mbCol_('$A' + r, MB_CONFIG.METRIC_MECH) : null;
-    return [
-      k.key,
-      MB_CONFIG.MEDIA_NAMES[k.media] || k.media,
-      k.site,
-      mbSpark_(cost, '#1a73e8'),
-      '=' + mbWrap_(cost, 'INDEX(c, $B$3)'),
-      '=' + mbWrap_(cost, 'LET(a, AVERAGE(' + mbWin_(7, 1) + '), IF(a=0, "", INDEX(c, $B$3) / a))'),
-      mech ? mbSpark_(mech, '#188038') : '—',
-      mech ? '=' + mbWrap_(mech, 'INDEX(c, $B$3)') : '—',
-      mech ? '=' + mbMechCpa_(cost, mech, MB_CONFIG.MECH_WINDOW_DAYS, MB_CONFIG.MECH_LAG_DAYS) : '—',
-      mech ? '=' + mbMechCpa_(cost, mech, MB_CONFIG.MECH_BASE_DAYS, MB_CONFIG.MECH_LAG_DAYS + MB_CONFIG.MECH_WINDOW_DAYS) : '—',
-      mech ? '=IFERROR(I' + r + ' / J' + r + ', "")' : '—',
-      '=' + mbWrap_(cost, 'LET(z, IFERROR(MAX(FILTER(SEQUENCE($B$3), CHOOSEROWS(c, SEQUENCE($B$3)) <> "")), 0), ' +
-        'IF(z = 0, "データなし", $B$3 - z))'),
-      '=IF(ISNUMBER(L' + r + '), LET(v, INDEX(' + mbDateCol_() + ', $B$3 - L' + r + '), IF(ISNUMBER(v), v, DATEVALUE(v))), "")',
-      mbReason_(r, !!mech),
-      '=IF(L' + r + ' = "データなし", "データなし", IF(N' + r + ' = "", "正常", "要確認"))',
-    ];
+    var n = MB_CONFIG.WEEK_MIN_COUNT;
+
+    var row = {};
+    row.key = k.key;
+    row.media = MB_CONFIG.MEDIA_NAMES[k.media] || k.media;
+    row.site = k.site;
+    row.judge = '=IF(' + at(C.blank) + ' = "データなし", "データなし", IF(' + at(C.reason) + ' = "", "正常", "要確認"))';
+    row.reason = mbReason_(r, !!mech);
+    row.costSpark = mbSpark_(cost, '#1a73e8');
+    row.costLast = '=' + mbWrap_(cost, 'INDEX(c, $B$3)');
+    row.costRatio = '=' + mbWrap_(cost, 'LET(a, AVERAGE(' + mbWin_(7, 1) + '), IF(a=0, "", INDEX(c, $B$3) / a))');
+    row.mechSpark = mech ? mbSpark_(mech, '#188038') : '—';
+
+    row.costWeek = '=' + at(C.c0);
+    row.costChg = '=' + mbChange_(at(C.c0), at(C.c1), '', '増', '減');
+    row.cvWeek = cv ? '=' + at(C.v0) : '—';
+    row.cvChg = cv ? '=' + mbChange_(at(C.v0), at(C.v1), 'OR(' + at(C.v0) + ' < ' + n + ', ' + at(C.v1) + ' < ' + n + ')', '改善', '悪化') : '—';
+    row.mechWeek = mech ? '=' + at(C.m0) : '—';
+    row.mechChg = mech ? '=' + mbChange_(at(C.m0), at(C.m1), 'OR(' + at(C.m0) + ' < ' + n + ', ' + at(C.m1) + ' < ' + n + ')', '改善', '悪化') : '—';
+    row.cpaNow = mech ? '=' + mbCpa_(at(C.c0), at(C.m0)) : '—';
+    row.cpaPrev = mech ? '=' + mbCpa_(at(C.c1), at(C.m1)) : '—';
+    // CPA は下がるほど良いので、上がったら「悪化」
+    row.cpaChg = mech ? '=' + mbChange_(at(C.cpaNow), at(C.cpaPrev), 'OR(' + at(C.m0) + ' < ' + n + ', ' + at(C.m1) + ' < ' + n + ')', '悪化', '改善') : '—';
+    row.trend = mech ? '=' + mbTrend_(r) : '—';
+
+    row.blank = '=' + mbWrap_(cost, 'LET(z, IFERROR(MAX(FILTER(SEQUENCE($B$3), CHOOSEROWS(c, SEQUENCE($B$3)) <> "")), 0), ' +
+      'IF(z = 0, "データなし", $B$3 - z))');
+    row.lastDate = '=IF(ISNUMBER(' + at(C.blank) + '), LET(v, INDEX(' + mbDateCol_() + ', $B$3 - ' + at(C.blank) + '), ' +
+      'IF(ISNUMBER(v), v, DATEVALUE(v))), "")';
+
+    [cost, cv, mech].forEach(function (expr, j) {
+      var names = [['c0', 'c1', 'c2'], ['v0', 'v1', 'v2'], ['m0', 'm1', 'm2']][j];
+      names.forEach(function (name, wIdx) {
+        row[name] = expr ? '=' + mbWeekSum_(expr, wIdx) : '';
+      });
+    });
+
+    // 列文字の順に並べる(間の空き列 V は空欄)
+    var out = [];
+    for (var col = 1; col <= mbColIndex_(C.m2); col++) out.push('');
+    Object.keys(C).forEach(function (name) { out[mbColIndex_(C[name]) - 1] = row[name]; });
+    return out;
   });
   board.getRange(MB_HEADER_ROWS + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 function mbApplyFormats_(board, n) {
+  var C = MB_COLS;
   var first = MB_HEADER_ROWS + 1;
-  var range = function (a1col) { return board.getRange(a1col + first + ':' + a1col + (first + n - 1)); };
+  var range = function (col) { return board.getRange(col + first + ':' + col + (first + n - 1)); };
+  var top = function (col) { return col + first; };
 
-  range('E').setNumberFormat('¥#,##0');
-  range('F').setNumberFormat('0%');
-  range('I').setNumberFormat('¥#,##0');
-  range('J').setNumberFormat('¥#,##0');
-  range('K').setNumberFormat('0%');
-  range('M').setNumberFormat('mm/dd');
+  [C.costLast, C.costWeek, C.cpaNow, C.cpaPrev, C.c0, C.c1, C.c2].forEach(function (col) {
+    range(col).setNumberFormat('¥#,##0');
+  });
+  range(C.costRatio).setNumberFormat('0%');
+  range(C.lastDate).setNumberFormat('mm/dd');
 
   var red = '#f4c7c3';
   var blue = '#c6dafc';
+  var green = '#ceead6';
   var rules = [
-    mbRule_(range('F'), '=AND(ISNUMBER(F' + first + '), F' + first + ' >= ' + (1 + MB_CONFIG.RATIO_ALERT) + ')', red),
-    mbRule_(range('F'), '=AND(ISNUMBER(F' + first + '), F' + first + ' <= ' + (1 - MB_CONFIG.RATIO_ALERT) + ')', blue),
-    mbRule_(range('K'), '=AND(ISNUMBER(K' + first + '), K' + first + ' >= ' + MB_CONFIG.MECH_CPA_ALERT + ')', red),
-    mbRule_(range('L'), '=AND(ISNUMBER(L' + first + '), L' + first + ' >= ' + MB_CONFIG.BLANK_ALERT_DAYS + ')', red),
-    mbRule_(range('O'), '=O' + first + ' = "要確認"', '#fce8b2'),
-    mbRule_(range('O'), '=O' + first + ' = "データなし"', '#e8eaed'),
+    mbRule_(range(C.judge), '=' + top(C.judge) + ' = "要確認"', '#fce8b2'),
+    mbRule_(range(C.judge), '=' + top(C.judge) + ' = "データなし"', '#e8eaed'),
+    mbRule_(range(C.costRatio), '=AND(ISNUMBER(' + top(C.costRatio) + '), ' + top(C.costRatio) + ' >= ' + (1 + MB_CONFIG.RATIO_ALERT) + ')', red),
+    mbRule_(range(C.costRatio), '=AND(ISNUMBER(' + top(C.costRatio) + '), ' + top(C.costRatio) + ' <= ' + (1 - MB_CONFIG.RATIO_ALERT) + ')', blue),
+    mbRule_(range(C.blank), '=AND(ISNUMBER(' + top(C.blank) + '), ' + top(C.blank) + ' >= ' + MB_CONFIG.BLANK_ALERT_DAYS + ')', red),
   ];
+  // 先週比・傾向の列: 「悪化」を赤、「改善」を緑
+  [C.cvChg, C.mechChg, C.cpaChg, C.trend].forEach(function (col) {
+    rules.push(mbRule_(range(col), '=ISNUMBER(SEARCH("悪化", ' + top(col) + '))', red));
+    rules.push(mbRule_(range(col), '=ISNUMBER(SEARCH("改善", ' + top(col) + '))', green));
+  });
   board.setConditionalFormatRules(rules);
 
   board.setFrozenRows(MB_HEADER_ROWS);
-  board.setFrozenColumns(3);
+  board.setFrozenColumns(4);
   board.setColumnWidth(1, 70);
-  board.setColumnWidth(4, 160);
-  board.setColumnWidth(7, 160);
-  board.setColumnWidth(14, 260);
+  board.setColumnWidth(mbColIndex_(C.reason), 220);
+  board.setColumnWidth(mbColIndex_(C.costSpark), 150);
+  board.setColumnWidth(mbColIndex_(C.mechSpark), 150);
+  [C.costChg, C.cvChg, C.mechChg, C.cpaChg].forEach(function (col) { board.setColumnWidth(mbColIndex_(col), 110); });
+  board.setColumnWidth(mbColIndex_(C.trend), 150);
   board.setRowHeights(first, n, 28);
+  // 補助列は隠す(消すと週比較が壊れるので、削除はしない)
+  board.hideColumns(mbColIndex_(C.c0), mbColIndex_(C.m2) - mbColIndex_(C.c0) + 1);
 }
 
 // ---- 数式の部品 -------------------------------------------------------------
@@ -227,23 +290,67 @@ function mbSpark_(colExpr, color) {
   return '=' + mbWrap_(colExpr, body);
 }
 
-/** 末尾から offset 日を除いた days 日分の 費用合計 / 整備士合計 */
-function mbMechCpa_(costExpr, mechExpr, days, offset) {
-  var seq = 'SEQUENCE(' + days + ', 1, $B$3 - ' + (offset + days - 1) + ')';
-  return 'IFERROR(LET(cs, SUM(CHOOSEROWS(' + costExpr + ', ' + seq + ')), ms, SUM(CHOOSEROWS(' + mechExpr + ', ' + seq +
-    ')), IF(ms = 0, IF(cs > 0, "整備士0", ""), cs / ms)), "")';
+/** 列文字(例: 'AC')を列番号に直す */
+function mbColIndex_(letters) {
+  var n = 0;
+  for (var i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
+  return n;
+}
+
+/** 週 wIdx(0=今週, 1=先週, 2=先々週)の合計。各週は直近 LAG_DAYS 日を除いた7日間ずつ */
+function mbWeekSum_(colExpr, wIdx) {
+  var endOff = MB_CONFIG.LAG_DAYS + 7 * wIdx;
+  return 'IFERROR(SUM(CHOOSEROWS(' + colExpr + ', SEQUENCE(7, 1, $B$3 - ' + (endOff + 6) + '))), "")';
+}
+
+/** 費用 ÷ 整備士数。整備士0件で費用があれば「整備士0」 */
+function mbCpa_(costCell, mechCell) {
+  return 'IF(OR(' + costCell + ' = "", ' + mechCell + ' = ""), "", IF(' + mechCell + ' = 0, IF(' + costCell + ' > 0, "整備士0", ""), ' +
+    costCell + ' / ' + mechCell + '))';
+}
+
+/**
+ * 今週 a と先週 b を比べたラベル(例: 「↑ 改善 +32%」「→ 横ばい -5%」「件数不足」)。
+ * upLabel / downLabel は増えたとき・減ったときの呼び方(CPA なら 上がる=悪化)。
+ * thinCond が真なら件数が少なすぎるので判定しない。
+ */
+function mbChange_(a, b, thinCond, upLabel, downLabel) {
+  var pct = 'TEXT(' + a + ' / ' + b + ' - 1, "+0%;-0%;0%")';
+  // 表示(整数%)と判定がずれないよう、丸めてから閾値と比べる(-19.9% を「-20% 横ばい」と出さない)
+  var body = 'IF(ABS(ROUND(' + a + ' / ' + b + ' - 1, 2)) < ' + MB_CONFIG.WEEK_CHANGE + ', "→ 横ばい " & ' + pct + ', ' +
+    'IF(' + a + ' > ' + b + ', "↑ ' + upLabel + ' ", "↓ ' + downLabel + ' ") & ' + pct + ')';
+  var guard = 'OR(NOT(ISNUMBER(' + a + ')), NOT(ISNUMBER(' + b + ')), ' + b + ' = 0)';
+  return 'IFERROR(IF(' + guard + ', "", ' + (thinCond ? 'IF(' + thinCond + ', "件数不足", ' + body + ')' : body) + '), "")';
+}
+
+/** 整備士CPAが先々週→先週→今週と、同じ向きに2週続けて ±WEEK_CHANGE 以上動いたか */
+function mbTrend_(r) {
+  var C = MB_COLS;
+  var at = function (col) { return col + r; };
+  var n = MB_CONFIG.WEEK_MIN_COUNT;
+  var th = MB_CONFIG.WEEK_CHANGE;
+  var cpa = function (c, m) { return '(' + at(c) + ' / ' + at(m) + ')'; };
+  var p0 = cpa(C.c0, C.m0), p1 = cpa(C.c1, C.m1), p2 = cpa(C.c2, C.m2);
+  return 'IFERROR(IF(OR(' + at(C.m0) + ' < ' + n + ', ' + at(C.m1) + ' < ' + n + ', ' + at(C.m2) + ' < ' + n + '), "件数不足", ' +
+    'IF(AND(' + p0 + ' / ' + p1 + ' - 1 >= ' + th + ', ' + p1 + ' / ' + p2 + ' - 1 >= ' + th + '), "悪化傾向(2週連続)", ' +
+    'IF(AND(' + p0 + ' / ' + p1 + ' - 1 <= -' + th + ', ' + p1 + ' / ' + p2 + ' - 1 <= -' + th + '), "改善傾向(2週連続)", ""))), "")';
 }
 
 /** 要確認の理由を「、」でつなぐ。何も無ければ空欄(=正常) */
 function mbReason_(r, hasMech) {
+  var C = MB_COLS;
+  var at = function (col) { return col + r; };
   var parts = [
-    'IF(AND(ISNUMBER(L' + r + '), L' + r + ' >= ' + MB_CONFIG.BLANK_ALERT_DAYS + '), "費用が" & L' + r + ' & "日空欄", "")',
-    'IF(AND(ISNUMBER(F' + r + '), F' + r + ' >= ' + (1 + MB_CONFIG.RATIO_ALERT) + '), "費用が平均より多い", "")',
-    'IF(AND(ISNUMBER(F' + r + '), F' + r + ' <= ' + (1 - MB_CONFIG.RATIO_ALERT) + '), "費用が平均より少ない", "")',
+    'IF(AND(ISNUMBER(' + at(C.blank) + '), ' + at(C.blank) + ' >= ' + MB_CONFIG.BLANK_ALERT_DAYS + '), "費用が" & ' + at(C.blank) + ' & "日空欄", "")',
+    'IF(AND(ISNUMBER(' + at(C.costRatio) + '), ' + at(C.costRatio) + ' >= ' + (1 + MB_CONFIG.RATIO_ALERT) + '), "昨日の費用が平均より多い", "")',
+    'IF(AND(ISNUMBER(' + at(C.costRatio) + '), ' + at(C.costRatio) + ' <= ' + (1 - MB_CONFIG.RATIO_ALERT) + '), "昨日の費用が平均より少ない", "")',
   ];
   if (hasMech) {
-    parts.push('IF(AND(ISNUMBER(K' + r + '), K' + r + ' >= ' + MB_CONFIG.MECH_CPA_ALERT + '), "整備士CPA悪化", "")');
-    parts.push('IF(I' + r + ' = "整備士0", "整備士0件(費用あり)", "")');
+    parts.push('IFERROR(IF(AND(ISNUMBER(' + at(C.cpaNow) + '), ISNUMBER(' + at(C.cpaPrev) + '), ' + at(C.m0) + ' >= ' + MB_CONFIG.WEEK_MIN_COUNT +
+      ', ' + at(C.m1) + ' >= ' + MB_CONFIG.WEEK_MIN_COUNT + ', ' + at(C.cpaNow) + ' / ' + at(C.cpaPrev) + ' - 1 >= ' + MB_CONFIG.CPA_ALERT +
+      '), "整備士CPAが先週より大幅悪化", ""), "")');
+    parts.push('IF(' + at(C.trend) + ' = "悪化傾向(2週連続)", "整備士CPAが2週連続悪化", "")');
+    parts.push('IF(' + at(C.cpaNow) + ' = "整備士0", "今週の整備士0件(費用あり)", "")');
   }
   return '=TEXTJOIN("、", TRUE, ' + parts.join(', ') + ')';
 }
