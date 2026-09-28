@@ -16,3 +16,5 @@
   — 不在証拠（Xが無い）から因果を語る前に「正常時にXは有ったか」を確認する対照試験を1本入れる。
 - [20260817-promote-only-after-listing-assumptions.md](20260817-promote-only-after-listing-assumptions.md)
   — 観察を推奨アクション・断定・数値へ昇格させる前に、依存する前提を列挙し確認済みかを付す。
+- [20260928-monitor-must-not-share-failure-mode.md](20260928-monitor-must-not-share-failure-mode.md)
+  — 監視の仕組みは監視対象と同じ壊れ方(ジョブ停止・シート再作成・集計途中の行)をしない形で作る。常に出続ける要確認は先に除外する。
