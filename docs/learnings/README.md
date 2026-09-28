@@ -22,3 +22,5 @@
   — キャンペーン単位の段の崩れは広告の入れ替わりと区別できない。広告別の内訳を出してから原因を書く。
 - [20260928-monitor-must-not-share-failure-mode.md](20260928-monitor-must-not-share-failure-mode.md)
   — 監視の仕組みは監視対象と同じ壊れ方(ジョブ停止・シート再作成・集計途中の行)をしない形で作る。常に出続ける要確認は先に除外する。
+- [20260928-null-cv-is-not-zero.md](20260928-null-cv-is-not-zero.md)
+  — 手作業で投入した日次データは、合計値に加えて列ごとの NULL 件数を数える。NULL に意味を持たせない。
