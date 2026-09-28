@@ -1,0 +1,4 @@
+config.yaml
+out/
+__pycache__/
+*.egg-info/

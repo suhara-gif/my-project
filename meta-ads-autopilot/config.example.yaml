@@ -1,0 +1,35 @@
+# 使い方: config.yaml にコピーして値を埋める。秘密情報はここに書かない(環境変数 META_ACCESS_TOKEN / SLACK_WEBHOOK_URL / ANTHROPIC_API_KEY)。
+gcp_project: your-gcp-project      # [要確認]
+bq_dataset: meta_ads
+graph_api_version: v23.0           # [要確認] 運用開始時点の最新版
+refetch_days: 7
+dry_run: true                      # false にするまで Meta へは一切書き込まない
+
+accounts:
+  # target_cpa は「CV(下の primary_conversion)1件あたり」の目標。整備士CPAではない点に注意。[要確認]
+  - account_id: "1280868240318718"
+    label: TW
+    target_cpa: 8000
+    # TWにはカスタムCV Mechanic_Lead がある。登録完了より整備士に近いので評価指標の第一候補。
+    # 計測開始日以降のデータしか無いため、切り替え前に発火数を確認すること。[要確認]
+    primary_conversion: "actions:offsite_conversion.fb_pixel_complete_registration"
+  - account_id: "554737564053673"
+    label: CWA
+    target_cpa: 8000
+  - account_id: "672794759096495"
+    label: MW
+    target_cpa: 8000
+
+lifecycle:
+  auto_execute: ["STOP"]           # dry_run=false のとき自動で「一時停止」してよい判定。SCALE は入れない
+  policy:
+    decide_spend_x: 2.0            # 目標CPA×2 の費用で CPA 判定開始
+    max_spend_x: 4.0               # 目標CPA×4 で打ち切り
+
+generation:
+  analyzer_model: claude-opus-5-5
+  script_model: claude-opus-5-5
+  mine:
+    min_ads: 3
+    min_expected_cv: 3.0
+    min_prob: 0.95

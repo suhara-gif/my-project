@@ -55,6 +55,9 @@
 ## Meta広告アカウントID（請求メール由来）
 
 - CWA=554737564053673 / TW=1280868240318718 / MW=672794759096495 / OS=677380074929608 / CW=723299057330625
+- ⚠️ 2026-09-25確認: 723299057330625 の管理画面上の名前は「**カーワクシニア**」（Ads MCP未開放）。
+  「カーワクエージェント」アカウント(554737564053673)のピクセルは主に **carworkassist.com（カーワク）** で発火しており
+  （9月: 112,755件。cwa-agent.com は845件のみ）、**CWA名義のMeta広告の登録はSF上ではCW流入として記録される**。
 
 ## 🔑 空欄の読み方（2026-08-09 追加 → 同日 独立検品により全面改訂）
 
@@ -89,6 +92,18 @@ CWアカウント(723299057330625)の領収書は**Gmail全期間で1通も存�
   無い可能性も残る。［要確認：Ads ManagerでCW Meta広告セットの稼働状態］
 - 2026-07-13 の「パイプライン不調が最有力」という結論は、**誤りとも正しいとも立証されていない**
   （8/9に「誤りだった」と書いたのは根拠が無効化されたため撤回）。
+
+## Salesforceで整備士を数えるとき（2026-09-25 追加）
+
+- TW流入日: `Contact.ManagementToyowakuInflowDate_del__c` ／ 参照元: `sourceMedium_j_tw__c`（Metaは `meta / cpc`）
+- 整備士フラグ: **`Field63__c`（整備士判定（カーワク））= '整備士'** を使う。`Field58__c`（整備資格抽出）はほぼ false で使えない
+- CWA名義のMeta広告の成果: `ManagementKarwakInflowDate_del__c`（カーワク流入日）＋ `sourceMedium_j_cw__c = 'meta / cpc'` で数える。
+  `sourceMedium_j_cwa__c` は2025-06以降 1,342件中0件しか値が入っておらず使えない
+- SFに **Metaのキャンペーン/広告セットIDは無い**ため、キャンペーン別の整備士数は取れない（期間で区切って推定するしかない）
+- トヨワクの整備士イベント `Mechanic_Lead` は GTM(GTM-K65GPM9S) のタグ「Mechanic_Lead」から送信。2026-09-25 にトリガーを
+  「ウィンドウの読み込み」へ修正し、eventID=`mech_会員ID` を付与（9/20〜9/25 は未送信だった）。
+  経緯: [docs/learnings/20260925-gtm-trigger-timing-mechanic-lead.md](../../docs/learnings/20260925-gtm-trigger-timing-mechanic-lead.md)
+- 経緯: [docs/learnings/20260925-meta-sf-mechanic-join.md](../../docs/learnings/20260925-meta-sf-mechanic-join.md)
 
 ## データ基準日のルール（2026-08-09 追加）
 
