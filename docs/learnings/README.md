@@ -16,3 +16,7 @@
   — 不在証拠（Xが無い）から因果を語る前に「正常時にXは有ったか」を確認する対照試験を1本入れる。
 - [20260817-promote-only-after-listing-assumptions.md](20260817-promote-only-after-listing-assumptions.md)
   — 観察を推奨アクション・断定・数値へ昇格させる前に、依存する前提を列挙し確認済みかを付す。
+- [20260928-ad-level-stats-need-volume-check.md](20260928-ad-level-stats-need-volume-check.md)
+  — 広告の自動判定は、判定単位あたりのCV件数を実データで数えてから統計手法を決める。
+- [20260928-campaign-funnel-needs-ad-breakdown.md](20260928-campaign-funnel-needs-ad-breakdown.md)
+  — キャンペーン単位の段の崩れは広告の入れ替わりと区別できない。広告別の内訳を出してから原因を書く。

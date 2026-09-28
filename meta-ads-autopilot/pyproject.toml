@@ -1,0 +1,26 @@
+[project]
+name = "meta-ads-autopilot"
+version = "0.1.0"
+description = "Meta広告の実績集約(BigQuery)・ファネル分解の異常検知・CR解析・動画CR生成・新CR判定の自動化"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+gcp = ["google-cloud-bigquery>=3.20"]
+llm = ["anthropic>=1.0"]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
