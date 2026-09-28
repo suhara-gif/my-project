@@ -113,3 +113,16 @@ pip install -e ".[dev]" && pytest -q
 ```
 
 判定ロジック(統計・ファネル分解・配信の偏り・失速・パターン分析・新CR判定・事実チェック)は外部接続なしでテストできます。
+
+## コネクタだけで回す運用(トークン不要・現在の運用)
+
+トークンや鍵を登録せず、Claude のコネクタ(Meta Ads MCP / BigQuery / Salesforce / Slack)と定期実行(Routine)で毎朝回す。
+
+1. Meta Ads MCP で直近7日の広告×日を取得し、`raw_ad_daily` の同期間を削除して入れ直す
+   - CV は `omni_complete_registration`。**結果が無い日は NULL ではなく 0 を入れる**(NULL は「0件」と区別できず、判定から外れる)
+   - Mechanic_Lead で最適化している広告は `cv = NULL`、`cv_definition = 'mechanic_lead_unavailable_via_meta_ads_mcp'`
+2. 直近35日を JSON で取り出し、`python -m meta_autopilot.offline --rows rows.json --target-cpa 5800 --label トヨワク` で判定
+3. Salesforce で直近35日の Meta 経由の整備士数を数え、整備士CPA を添えて Slack に送る
+
+目標CPA ¥5,800 は「整備士CPA ¥40,000 × 整備士9件 ÷ 登録62件」(2026-08-24〜09-27)から換算した値。
+整備士の件数が少ないので、1〜2か月ごとに見直す。
