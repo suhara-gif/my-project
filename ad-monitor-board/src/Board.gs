@@ -269,7 +269,11 @@ function mbDateCol_() {
  * 値が「38,759」のような文字列で入っていても数値に直す。空欄は "" のまま残す(0 と区別するため)。
  */
 function mbCol_(keyCell, metric) {
-  var raw = 'INDEX(' + mbSrcRange_('A2:ZZZ') + ', 0, MATCH(' + keyCell + ' & "_' + metric + '", ' + mbSrcRange_('1:1') + ', 0))';
+  // 列番号 m を見出しから探し、R1C1 形式の「R2Cm:Cm」(2行目から最終行まで)で参照する。
+  // A2:ZZZ のような固定範囲はシートの列数を超えるとエラーになるため使わない。
+  var sheet = "'" + MB_CONFIG.SOURCE_SHEET.replace(/'/g, "''") + "'!";
+  var m = 'MATCH(' + keyCell + ' & "_' + metric + '", ' + mbSrcRange_('1:1') + ', 0)';
+  var raw = 'INDIRECT("' + sheet.replace(/"/g, '""') + 'R2C" & ' + m + ' & ":C" & ' + m + ', FALSE)';
   return 'ARRAYFORMULA(LET(x, ' + raw + ', IF(x = "", "", IFERROR(VALUE(x), ""))))';
 }
 
