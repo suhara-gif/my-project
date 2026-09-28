@@ -12,6 +12,7 @@
 | [`second-brain/`](second-brain/) | Obsidian vault をセカンドブレイン化するキット。詳細ルールは [`second-brain/vault-template/CLAUDE.md`](second-brain/vault-template/CLAUDE.md) |
 | [`company/`](company/) | AI秘書「アプ子」(`/up`, `/my-secretary`)まわりの設定・ナレッジ・日報 |
 | [`phone-manual-quiz/`](phone-manual-quiz/) | 電話コミュニケーション基本マニュアルの理解度テスト(GAS製Webアプリ)。詳細は [`phone-manual-quiz/README.md`](phone-manual-quiz/README.md) |
+| [`ad-monitor-board/`](ad-monitor-board/) | 広告実績シート(daily_summary)の横に、変化・異常が一目で分かる監視ボードを数式で作るGAS。詳細は [`ad-monitor-board/README.md`](ad-monitor-board/README.md) |
 | [`fable5-agent-system/`](fable5-agent-system/) | Claude API 上の自己改善型エージェントシステムの実装(Python) |
 | [`meta-ads-autopilot/`](meta-ads-autopilot/) | Meta広告の実績集約(BigQuery)・ファネル分解の異常検知・CR解析・動画CR生成・新CR判定(Python)。詳細は [`meta-ads-autopilot/CLAUDE.md`](meta-ads-autopilot/CLAUDE.md) |
 | [`docs/learnings/`](docs/learnings/) | 非自明な問題を解いたときの学びノート置き場(リポジトリ横断) |
