@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .detect.delivery import AdWindow, detect_delivery_skew
-from .detect.fatigue import AdHistory, detect_winner_fatigue
+from .detect.fatigue import AdHistory, detect_winner_dropout, detect_winner_fatigue
 from .detect.funnel import detect_funnel_breaks
 from .ingest import bq
 from .ingest.meta_insights import fetch_ad_daily, refetch_window, to_bq_row
@@ -76,16 +76,7 @@ def detect(cfg: Config) -> list[Alert]:
     alerts: list[Alert] = []
     alerts += _detect_data_gaps(cfg, t)
 
-    # (a) キャンペーン単位のファネル分解: 直近7日 vs その前21日
-    camp_rows = bq.query(
-        cfg.gcp_project,
-        _WINDOW_SQL.format(t=t, keys="r.account_id, r.campaign_id", agg="ANY_VALUE(r.campaign_name) AS campaign_name,\n  " + _agg_cols(7, 7, 28)),
-    )
-    for r in camp_rows:
-        scope = f"{cfg.account(r['account_id']).label} / campaign:{r['campaign_id']} {r['campaign_name']}"
-        alerts += detect_funnel_breaks(scope, _totals(r, "_cur"), _totals(r, "_base"))
-
-    # (b) 配信の偏り: キャンペーン内の広告別 直近7日 vs その前21日
+    # 広告別 直近7日 vs その前21日。(a) ファネル分解の内訳と (b) 配信の偏りの両方に使う
     ad_rows = bq.query(
         cfg.gcp_project,
         _WINDOW_SQL.format(t=t, keys="r.account_id, r.campaign_id, r.ad_id",
@@ -97,9 +88,15 @@ def detect(cfg: Config) -> list[Alert]:
     for (acc_id, camp_id), rows in by_camp.items():
         acc = cfg.account(acc_id)
         ads = [AdWindow(r["ad_id"], r["ad_name"], _totals(r, "_cur"), _totals(r, "_base")) for r in rows]
-        alerts += detect_delivery_skew(f"{acc.label} / campaign:{camp_id} {rows[0]['campaign_name']}", ads, target_cpa=acc.target_cpa)
+        scope = f"{acc.label} / campaign:{camp_id} {rows[0]['campaign_name']}"
+        cur = sum((a.current for a in ads), FunnelTotals.zero())
+        base = sum((a.baseline for a in ads), FunnelTotals.zero())
+        # (a) キャンペーン単位のファネル分解(不足分を広告別に内訳)
+        alerts += detect_funnel_breaks(scope, cur, base, ads=ads)
+        # (b) 配信の偏り
+        alerts += detect_delivery_skew(scope, ads, target_cpa=acc.target_cpa)
 
-    # (c) 勝ちCRの失速: 基準 = 8〜35日前、現在 = 直近7日、CTR は直近14日の日次
+    # (c) 勝ちCRの失速・配信停止: 基準 = 8〜35日前、現在 = 直近7日、CTR は直近14日の日次
     alerts += _detect_fatigue(cfg, t)
     return alerts
 
@@ -164,7 +161,9 @@ def _detect_fatigue(cfg: Config, t: str) -> list[Alert]:
             daily_ctr=[d["ctr"] for d in daily], daily_impressions=[d["imp"] for d in daily],
             frequency_baseline=r["freq_base"], frequency_current=r["freq_cur"],
         )
-        alerts += detect_winner_fatigue(f"{acc.label} / ad:{r['ad_id']}", h, target_cpa=acc.target_cpa)
+        scope = f"{acc.label} / ad:{r['ad_id']}"
+        alerts += detect_winner_fatigue(scope, h, target_cpa=acc.target_cpa)
+        alerts += detect_winner_dropout(scope, h, target_cpa=acc.target_cpa)
     return alerts
 
 

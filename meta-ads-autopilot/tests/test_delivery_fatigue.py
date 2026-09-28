@@ -37,3 +37,16 @@ def test_winner_fatigue_needs_ctr_or_frequency_signal():
 def test_non_winner_is_ignored():
     h = AdHistory("x", "x", F(200_000, 100_000, 1_000, 800, 5), F(70_000, 35_000, 200, 150, 0), [0.01] * 7, [1000] * 7)
     assert detect_winner_fatigue("s", h, target_cpa=8_000) == []
+
+
+from meta_autopilot.detect.fatigue import detect_winner_dropout
+
+
+def test_winner_dropout():
+    base = F(177_000, 70_000, 420, 350, 13)
+    stopped = AdHistory("w", "勝ち", base, F(0, 0, 0, 0, 0), [], [])
+    running = AdHistory("w", "勝ち", base, F(40_000, 16_000, 100, 80, 3), [0.006] * 7, [2000] * 7)
+    assert detect_winner_dropout("s", stopped, target_cpa=14_000)
+    assert detect_winner_dropout("s", running, target_cpa=14_000) == []
+    loser = AdHistory("x", "負け", F(177_000, 70_000, 420, 350, 2), F(0, 0, 0, 0, 0), [], [])
+    assert detect_winner_dropout("s", loser, target_cpa=14_000) == []

@@ -18,3 +18,5 @@
   — 観察を推奨アクション・断定・数値へ昇格させる前に、依存する前提を列挙し確認済みかを付す。
 - [20260928-ad-level-stats-need-volume-check.md](20260928-ad-level-stats-need-volume-check.md)
   — 広告の自動判定は、判定単位あたりのCV件数を実データで数えてから統計手法を決める。
+- [20260928-campaign-funnel-needs-ad-breakdown.md](20260928-campaign-funnel-needs-ad-breakdown.md)
+  — キャンペーン単位の段の崩れは広告の入れ替わりと区別できない。広告別の内訳を出してから原因を書く。

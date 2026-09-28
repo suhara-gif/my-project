@@ -129,16 +129,86 @@ class FunnelThresholds:
     critical_prob_worse: float = 0.98
 
 
+# 段ごとの (分子, 分母) の取り出し方。CPM は「費用 / インプレッション」で、上がるほど悪い。
+_STAGE_PARTS = {
+    "cpm": (lambda t: t.spend, lambda t: t.impressions),
+    "ctr": (lambda t: t.link_clicks, lambda t: t.impressions),
+    "lpv_rate": (lambda t: t.lpv, lambda t: t.link_clicks),
+    "cvr": (lambda t: t.cv, lambda t: t.lpv),
+}
+
+
+@dataclass(frozen=True)
+class AdGap:
+    ad_id: str
+    ad_name: str
+    share_of_gap: float  # 段の不足分(CVR なら「基準のCVRなら取れていたはずのCV」)のうち、この広告が占める割合
+    is_new: bool  # 基準期間にほとんど配信されていなかった広告
+    share_shift: float  # その段の分母(CVRならLPV)に占めるシェアの変化(現在 − 基準)
+    cpa_current: float
+
+
+def attribute_stage_gap(stage: str, ads: list, base_campaign: FunnelTotals, *, new_share_max: float = 0.05) -> list[AdGap]:
+    """キャンペーンの段の悪化を、どの広告が生んだかに分ける。
+
+    各広告について「現在の分母 × (キャンペーン基準の率 − その広告の現在の率)」を不足分とする
+    (CPM は逆向き)。合計はキャンペーン全体の不足分に一致する。
+    勝ちCRの停止や新CRへの配信の寄りで率が下がったケースを、LP・計測の問題と取り違えないために使う。
+    """
+    num, den = _STAGE_PARTS[stage]
+    base_den = den(base_campaign)
+    if not base_den:
+        return []
+    base_rate = num(base_campaign) / base_den
+    total_base_den = sum(den(a.baseline) for a in ads) or 1.0
+    total_cur_den = sum(den(a.current) for a in ads) or 1.0
+    gaps = []
+    for a in ads:
+        d_cur = den(a.current)
+        if not d_cur:
+            continue
+        gap = d_cur * base_rate - num(a.current)
+        if stage == "cpm":
+            gap = -gap  # 費用が基準より多くかかった分
+        gaps.append((a, gap))
+    total = sum(g for _, g in gaps)
+    if total <= 0:
+        return []
+    out = [
+        AdGap(
+            a.ad_id,
+            a.ad_name,
+            g / total,
+            den(a.baseline) / total_base_den <= new_share_max,
+            den(a.current) / total_cur_den - den(a.baseline) / total_base_den,
+            a.current.cpa,
+        )
+        for a, g in gaps
+        if g > 0
+    ]
+    return sorted(out, key=lambda x: -x.share_of_gap)
+
+
 def detect_funnel_breaks(
     scope: str,
     cur: FunnelTotals,
     base: FunnelTotals,
     th: FunnelThresholds = FunnelThresholds(),
+    *,
+    ads: list | None = None,
+    shift_pt: float = 0.20,
 ) -> list[Alert]:
-    """確からしい悪化段ごとに Alert を返す(最大寄与の段を先頭に)。"""
+    """確からしい悪化段ごとに Alert を返す(最大寄与の段を先頭に)。
+
+    ads(detect.delivery.AdWindow のリスト)を渡すと、不足分の内訳を広告別に出し、
+    1本の広告で過半を説明できるときは原因をその広告に絞る。
+    """
     if cur.impressions < th.min_impressions_current:
         return []
     d = decompose(cur, base)
+    # 他の段の改善で相殺され、CPA 全体は悪化していないなら通知しない
+    if not math.isnan(d.log_cpa_change) and math.exp(d.log_cpa_change) - 1 < th.min_relative_worsening:
+        return []
     hits: list[tuple[StageResult, float]] = []
     for s in d.stages:
         if math.isnan(s.log_contribution) or s.log_contribution <= 0:
@@ -152,15 +222,44 @@ def detect_funnel_breaks(
     alerts = []
     for s, rel in hits:
         cause, actions = STAGE_PLAYBOOK[s.stage]
+        cause_text = f"この段だけで CPA を約{rel:.0%}押し上げ。候補: {cause}"
+        actions = list(actions)
+        gaps = attribute_stage_gap(s.stage, ads, base) if ads else []
+        if gaps:
+            top = gaps[0]
+            breakdown = "、".join(f"{g.ad_name} {g.share_of_gap:.0%}" for g in gaps[:3])
+            shifted = top.is_new or top.share_shift >= shift_pt
+            if top.share_of_gap >= 0.5 and shifted:
+                kind = "新しく配信が始まったCR" if top.is_new else f"配信シェアが{top.share_shift:+.0%}pt増えたCR"
+                cause_text = (
+                    f"この段だけで CPA を約{rel:.0%}押し上げ。不足分の{top.share_of_gap:.0%}は{kind}「{top.ad_name}」。"
+                    f"LP・計測よりも、配信構成の変化(このCRへの寄り)が主因の可能性が高い。内訳: {breakdown}"
+                )
+                first = (
+                    f"「{top.ad_name}」の停止、または予算上限のある広告セットへの分離を検討"
+                    if top.cpa_current > d.cpa_baseline
+                    else f"「{top.ad_name}」の CPA 自体は基準以内なので停止はしない。他CRの配信減の理由を確認"
+                )
+                actions = [first, "直前まで成果を出していたCRが止まっていないか確認(winner_dropout アラートも参照)"] + actions[:1]
+            elif top.share_of_gap >= 0.5:
+                cause_text = (
+                    f"この段だけで CPA を約{rel:.0%}押し上げ。不足分の{top.share_of_gap:.0%}は「{top.ad_name}」自体の悪化"
+                    f"(配信シェアはほぼ変わらず)。候補: {cause}"
+                )
+                actions = [f"「{top.ad_name}」の {STAGE_LABEL[s.stage]} の日次推移を確認"] + actions
+            else:
+                cause_text += f"。内訳: {breakdown}"
+        # CPM は確率モデルを持たない簡易判定なので critical にしない
+        critical = s.prob_worse >= th.critical_prob_worse and s.stage != "cpm"
         fmt = (lambda v: f"¥{v:,.0f}") if s.stage == "cpm" else (lambda v: f"{v:.2%}")
         alerts.append(
             Alert(
                 kind="funnel_break",
-                severity=Severity.CRITICAL if s.prob_worse >= th.critical_prob_worse else Severity.WARN,
+                severity=Severity.CRITICAL if critical else Severity.WARN,
                 scope=scope,
                 title=f"{STAGE_LABEL[s.stage]}で崩れ: {fmt(s.baseline)} → {fmt(s.current)}",
-                cause=f"この段だけで CPA を約{rel:.0%}押し上げ。候補: {cause}",
-                actions=list(actions),
+                cause=cause_text,
+                actions=actions,
                 evidence={
                     "stage": s.stage,
                     "prob_worse": round(s.prob_worse, 3),
@@ -168,6 +267,7 @@ def detect_funnel_breaks(
                     "cpa_baseline": d.cpa_baseline,
                     "impressions_current": cur.impressions,
                     "cv_current": cur.cv,
+                    "gap_by_ad": [(g.ad_id, round(g.share_of_gap, 3)) for g in gaps[:5]],
                 },
             )
         )
