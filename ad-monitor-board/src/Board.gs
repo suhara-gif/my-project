@@ -171,14 +171,16 @@ function mbWriteRows_(board, keys, headers) {
     row.site = k.site;
     row.judge = '=IF(' + at(C.blank) + ' = "データなし", "データなし", IF(' + at(C.reason) + ' = "", "正常", "要確認"))';
     row.reason = mbReason_(r, !!mech);
-    row.costSpark = mbSpark_(cost, '#1a73e8');
+    // 全期間空欄(データなし)の行は、平らな折れ線や ¥0 を出さず空欄にする
+    var noData = function (f) { return '=IF(' + at(C.blank) + ' = "データなし", "", ' + f.replace(/^=/, '') + ')'; };
+    row.costSpark = noData(mbSpark_(cost, '#1a73e8'));
     row.costLast = '=' + mbWrap_(cost, 'INDEX(c, $B$3)');
     row.costRatio = '=' + mbWrap_(cost, 'LET(a, AVERAGE(' + mbWin_(7, 1) + '), IF(a=0, "", INDEX(c, $B$3) / a))');
     row.mechSpark = mech ? mbSpark_(mech, '#188038') : '—';
 
-    row.costWeek = '=' + at(C.c0);
+    row.costWeek = noData('=' + at(C.c0));
     row.costChg = '=' + mbChange_(at(C.c0), at(C.c1), '', '増', '減');
-    row.cvWeek = cv ? '=' + at(C.v0) : '—';
+    row.cvWeek = cv ? noData('=' + at(C.v0)) : '—';
     row.cvChg = cv ? '=' + mbChange_(at(C.v0), at(C.v1), 'OR(' + at(C.v0) + ' < ' + n + ', ' + at(C.v1) + ' < ' + n + ')', '改善', '悪化') : '—';
     row.mechWeek = mech ? '=' + at(C.m0) : '—';
     row.mechChg = mech ? '=' + mbChange_(at(C.m0), at(C.m1), 'OR(' + at(C.m0) + ' < ' + n + ', ' + at(C.m1) + ' < ' + n + ')', '改善', '悪化') : '—';
@@ -219,6 +221,10 @@ function mbApplyFormats_(board, n) {
     range(col).setNumberFormat('¥#,##0');
   });
   range(C.costRatio).setNumberFormat('0%');
+  // CV は広告媒体の計測で端数が付くことがあるため整数で表示する
+  [C.cvWeek, C.mechWeek, C.v0, C.v1, C.v2, C.m0, C.m1, C.m2].forEach(function (col) {
+    range(col).setNumberFormat('#,##0');
+  });
   range(C.lastDate).setNumberFormat('mm/dd');
 
   var red = '#f4c7c3';
