@@ -35,10 +35,15 @@ CREATE TABLE IF NOT EXISTS `${dataset}.creative_features` (
   ad_id STRING,
   account_id STRING,
   media_type STRING,              -- video / image
+  -- multimodal: フレーム画像を実際に見て判定。text_only: 本文・タイトル・CTAだけから判定
+  -- (画素に到達できないとき)で、視覚依存の列(hook_type等)はNULLのまま。
+  -- v_creative_performance 等で見た目に関する集計をするときは text_only を除外すること。
+  analysis_scope STRING NOT NULL DEFAULT 'multimodal',
   duration_sec FLOAT64,
   hook_type STRING,               -- 冒頭フックの型(質問/数字/悩み/共感/驚き/権威/UGC風 等)
   hook_text STRING,
   appeal_axis STRING,             -- 訴求軸(待遇/環境/悩み解決/不安/キャリア/地域 等)
+  secondary_appeal_axis STRING,
   benefit STRING,
   offer STRING,
   cta STRING,
@@ -52,6 +57,7 @@ CREATE TABLE IF NOT EXISTS `${dataset}.creative_features` (
   cuts_per_10s FLOAT64,           -- テンポ
   has_subtitles BOOL,
   has_voiceover BOOL,
+  notes STRING,
   features_json STRING,           -- 上記を含む解析結果の全体
   analyzer_model STRING,
   analyzer_version STRING,

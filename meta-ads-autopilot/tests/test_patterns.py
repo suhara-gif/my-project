@@ -28,3 +28,24 @@ def test_campaign_level_normalization():
 def test_min_support():
     rows = [_ad(1, "c1", 30, "anxiety", "x"), _ad(2, "c1", 1, "number", "x"), _ad(3, "c1", 1, "number", "x")]
     assert all(s.n_ads >= 3 for s in mine_patterns(rows, attributes=("hook_type",), max_order=1))
+
+
+def test_text_only_rows_excluded_from_visual_attributes():
+    from meta_autopilot.patterns.mine import mine_patterns
+
+    multimodal = [dict(_ad(i, "c1", 12, "anxiety", "compensation"), analysis_scope="multimodal") for i in range(4)]
+    multimodal += [dict(_ad(100 + i, "c1", 2, "number", "brand"), analysis_scope="multimodal") for i in range(8)]
+    text_only_dup = [dict(_ad(200 + i, "c1", 12, "anxiety", "compensation"), analysis_scope="text_only") for i in range(4)]
+    stats_mixed = mine_patterns(multimodal + text_only_dup, attributes=("hook_type",), max_order=1)
+    stats_multimodal_only = mine_patterns(multimodal, attributes=("hook_type",), max_order=1)
+    # text_only 行が混ざっていても、視覚属性(hook_type)の判定は multimodal 12件だけから出た結果と同じになる
+    assert [s.n_ads for s in stats_mixed] == [s.n_ads for s in stats_multimodal_only] == [4]
+
+
+def test_text_only_rows_kept_for_non_visual_attributes():
+    from meta_autopilot.patterns.mine import mine_patterns
+
+    high = [dict(_ad(i, "c1", 12, "anxiety", "compensation"), analysis_scope="text_only") for i in range(4)]
+    low = [dict(_ad(10 + i, "c1", 2, "number", "brand"), analysis_scope="text_only") for i in range(8)]
+    stats = mine_patterns(high + low, attributes=("appeal_axis",), max_order=1)
+    assert stats and stats[0].n_ads == 4  # appeal_axis はテキストからでも埋めてよい項目なので除外しない

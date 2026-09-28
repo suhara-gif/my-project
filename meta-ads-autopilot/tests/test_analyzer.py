@@ -37,3 +37,25 @@ def test_content_marks_missing_transcript(tmp_path):
     c = build_content(AnalyzerInput("cr1", "image", [(0.0, img)]))
     assert c[1]["source"]["media_type"] == "image/png"
     assert "has_voiceover は null" in c[-1]["text"]
+
+
+def test_text_only_analysis_leaves_visual_fields_none():
+    from meta_autopilot.creative.analyzer import analyze_text_only
+
+    f = analyze_text_only(
+        "cr9", media_type="video", ad_title="t", ad_body="年間休日120日以上・年収500万円以上の求人多数",
+        call_to_action_type="SIGN_UP", duration_sec=19.32, appeal_axis="compensation",
+        benefit="年間休日120日以上・年収500万円以上の求人多数", offer="年収500万円以上", notes="fbcdn.net遮断のため画素未取得",
+    )
+    assert f.analysis_scope == "text_only"
+    assert f.cta == "今すぐ登録" and f.duration_sec == 19.32
+    assert f.hook_type is None and f.has_person is None and f.format_style is None
+
+
+def test_to_bq_row_includes_analysis_scope():
+    from meta_autopilot.creative.analyzer import analyze_text_only, to_bq_row
+
+    f = analyze_text_only("cr9", media_type="image", ad_title="t", ad_body="b", call_to_action_type=None,
+                          duration_sec=None, appeal_axis=None, benefit=None, offer=None, notes="n")
+    row = to_bq_row("cr9", "ad9", "acc", f, model="manual", analyzed_at="t")
+    assert row["analysis_scope"] == "text_only" and row["hook_type"] is None
