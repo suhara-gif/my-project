@@ -95,15 +95,22 @@ def detect_winner_dropout(
     baseline_days: int = 28,
     current_days: int = 7,
     max_spend_ratio: float = 0.2,
+    baseline_spend_share: float | None = None,
+    major_share: float = 0.15,
     th: FatigueThresholds = FatigueThresholds(),
 ) -> list[Alert]:
-    """勝ちCRの配信がほぼ止まったことを検知する。
+    """勝ちCR、または基準期間にキャンペーン費用の major_share 以上を占めた主力CRの配信停止を検知する。
+
+    主力CRは CPA が目標より悪くても対象にする(費用は CV と違いノイズが小さく、最大費用CRが
+    消えると配信構成が変わって上流の指標が動くため)。この場合は勝ちCRとは書かず「主力CR」とする。
 
     失速(detect_winner_fatigue)は配信が続いている前提なので、費用が0になった勝ちCRは拾えない。
     手動停止・Meta の配分変更・審査落ち・予算変更のどれかだが、この情報だけでは区別できないので
     原因は断定せず、意図した停止かの確認を促す。
     """
-    if not is_winner(h, target_cpa=target_cpa, th=th):
+    winner = is_winner(h, target_cpa=target_cpa, th=th)
+    major = baseline_spend_share is not None and baseline_spend_share >= major_share
+    if not (winner or major):
         return []
     daily_base = h.baseline.spend / baseline_days
     daily_cur = h.current.spend / current_days
@@ -111,10 +118,10 @@ def detect_winner_dropout(
         return []
     return [
         Alert(
-            kind="winner_dropout",
+            kind="winner_dropout" if winner else "major_dropout",
             severity=Severity.WARN,
             scope=scope,
-            title=f"勝ちCRの配信がほぼ止まった: {h.ad_name}",
+            title=f"{'勝ちCR' if winner else '主力CR'}の配信がほぼ止まった: {h.ad_name}",
             cause=(
                 f"基準期間は1日平均 ¥{daily_base:,.0f}・CV {h.baseline.cv:.0f}件、直近{current_days}日は1日平均 ¥{daily_cur:,.0f}。"
                 "手動停止・Meta の配分変更・審査・予算変更のいずれか(この情報だけでは区別できない)"

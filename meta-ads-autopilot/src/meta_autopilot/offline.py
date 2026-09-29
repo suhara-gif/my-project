@@ -76,6 +76,7 @@ def detect_rows(rows: list[dict], *, target_cpa: float) -> tuple[list[Alert], di
         base = sum((a.baseline for a in ads), FunnelTotals.zero())
         alerts += detect_funnel_breaks(scope, cur, base, ads=ads)
         alerts += detect_delivery_skew(scope, ads, target_cpa=target_cpa)
+        camp_base_spend = sum(x.baseline.spend for x in ads)
         for (i, n), a in by_ad.items():
             a = sorted(a, key=lambda r: str(r["date"]))
             last14 = [r for r in a if age(r) < 14 and _f(r["impressions"]) > 0]
@@ -87,7 +88,8 @@ def detect_rows(rows: list[dict], *, target_cpa: float) -> tuple[list[Alert], di
                 _wfreq([r for r in a if 7 <= age(r) < 35]), _wfreq([r for r in a if age(r) < 7]),
             )
             alerts += detect_winner_fatigue(f"広告 {n}", h, target_cpa=target_cpa)
-            alerts += detect_winner_dropout(f"広告 {n}", h, target_cpa=target_cpa)
+            share = h.baseline.spend / camp_base_spend if camp_base_spend else None
+            alerts += detect_winner_dropout(f"広告 {n}", h, target_cpa=target_cpa, baseline_spend_share=share)
 
     last7 = _totals([r for r in rows if age(r) < 7])
     prev21 = _totals([r for r in rows if 7 <= age(r) < 28])
