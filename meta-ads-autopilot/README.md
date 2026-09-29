@@ -106,13 +106,13 @@ ffmpeg / ffprobe(CR解析のフレーム切り出しと動画の組み立て)と
 - BigQuery への実書き込み・実APIでの `daily` の通し実行(このリポジトリではユニットテストのみ実施)
 - ~~ffmpeg を使う `render` / フレーム切り出しの実行確認~~ → 2026-09-28 訂正: ffmpeg は `apt-get install ffmpeg`
   で導入できる(実行環境依存の未確認事項ではなかった)。実際の壁は下記。
-- **CR解析の実データ実行(訂正・新規)**: 2026-09-28、このリポジトリを操作するリモート実行セッションの
-  ネットワークポリシーが Meta の配信CDN(`*.fbcdn.net`。creative の image_url/thumbnail_url/動画ダウンロード元)
-  への直接アクセスを拒否することを確認した(403、ポリシー拒否)。Meta Ads MCP 経由の広告本文・タイトル・CTA・
-  動画の長さ(ads_get_ad_videos の length。ダウンロード不要)は取得できるが、画素・音声そのものは取得できない。
-  これが解消するまで、CR解析は `analysis_scope='text_only'`(本文・タイトル・CTAのみ。視覚項目はNULL)に限られる。
-  解消には、このセッションの環境設定(環境メニュー→Edit→Network access)で `*.fbcdn.net` を許可するか、
-  ffmpeg・ネットワークとも制約の無い別実行環境(須原さんのローカル、または専用のGCP実行基盤等)に移す必要がある。
+- **CR解析の実データ実行(2026-09-29 更新)**: 環境のネットワークアクセスを **Full** にしたところ `*.fbcdn.net` に到達でき、
+  静止画(1080x1080)をダウンロードして Read tool で直接見て `analysis_scope='multimodal'` で解析→BigQuery投入→実績JOINまで通った
+  (トヨワク ASC_ブランド訴求16_整備士。API キー不要。analyzer.analyze() は使わず、セッションの Claude 自身が見て値を組み立てる)。
+  未解決は動画: Meta Ads MCP の `ads_get_ad_videos` の `download_hd_url` が null(動画の元ファイルへの権限がこのアプリに無い)で、
+  取れるのは表紙の160pxサムネイル1コマだけ。フック・テンポ・露出秒は判定できないため、動画は text_only のまま。
+  動画の元ファイル(HeyGen の書き出し等)を Drive 経由などで渡すか、アプリの権限を見直す必要がある。
+  Full は全ドメインが開くので、動作確認後は `*.fbcdn.net` だけ許可する Custom に戻すこと。
 
 ## テスト
 
