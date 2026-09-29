@@ -17,7 +17,8 @@ claude.ai のルーティン作成画面で次のように設定し、下の「�
 - 目標CPA(登録1件あたり): 5800 円(整備士CPA 4万円から換算)
 
 手順
-1. Meta Ads MCP(ads_get_ad_entities, level=ad, time_increment="1")で、昨日までの直近7日の広告×日を取得する。fields: id, name, campaign_id, campaign_name, adset_id, adset_name, amount_spent, impressions, link_click, landing_page_view, omni_complete_registration, frequency。費用0の日は入れなくてよい。
+0. 日付は必ず日本時間で決める。実行環境はUTCなので、最初に `TZ=Asia/Tokyo date +%F` で今日の日付を確認し、その前日を「昨日」とする(UTCのまま決めると、朝8:52 JST の実行で昨日が1日ずれ、9/29朝の実行で 9/27 までしか取れない)。
+1. Meta Ads MCP(ads_get_ad_entities, level=ad, time_increment="1")で、日本時間の昨日までの直近7日の広告×日を取得する。fields: id, name, campaign_id, campaign_name, adset_id, adset_name, amount_spent, impressions, link_click, landing_page_view, omni_complete_registration, frequency。費用0の日は入れなくてよい。
 2. raw_ad_daily の同じ7日間・同アカウントの行を DELETE し、取得した行を INSERT する。
    - cv = omni_complete_registration。値が無い/Not available の日は必ず 0(NULLにしない)。cv_definition = 'omni_complete_registration'。link_clicks・landing_page_views も無ければ 0。
    - Mechanic_Lead で最適化している広告(結果の指標が Mechanic_Lead のもの。例: TEST_ブランド訴求15_整備士 / TEST_ブランド訴求16_整備士)は cv = NULL、cv_definition = 'mechanic_lead_unavailable_via_meta_ads_mcp'。
