@@ -14,12 +14,13 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from .detect.delivery import AdWindow, detect_delivery_skew
 from .detect.fatigue import AdHistory, detect_winner_dropout, detect_winner_fatigue
 from .detect.funnel import detect_funnel_breaks
+from .lifecycle.decide import Decision, LifecycleResult, decide
 from .models import Alert, FunnelTotals, Severity
 
 _ICON = {Severity.CRITICAL: "🔴", Severity.WARN: "🟠", Severity.INFO: "⚪"}
@@ -97,6 +98,65 @@ def detect_rows(rows: list[dict], *, target_cpa: float) -> tuple[list[Alert], di
     return alerts, summary
 
 
+def judge_new_crs(
+    rows: list[dict], *, target_cpa: float, new_within_days: int = 14, min_age_of_control_days: int = 3
+) -> list[LifecycleResult]:
+    """直近 new_within_days 日に配信が始まった広告(新CR)を、同じキャンペーンの既存広告と同じ配信日で比べる。
+
+    コントロール = 同キャンペーンで、新CRの初配信日より前から配信されていた他の広告の合算。
+    「勝ちCR」は登録CPA では特定できない(件数が少なすぎる)ため、キャンペーンの既存広告全体を基準にする。
+    比較は新CRが実際に配信された日だけに揃える。CV定義が違う行・空欄は detect_rows と同じ理由で外す。
+    """
+    defs = [r.get("cv_definition") for r in rows if r.get("cv_definition")]
+    main_def = max(set(defs), key=defs.count) if defs else None
+    rows = [r for r in rows if r.get("cv") is not None and r.get("cv_definition") == main_def and _f(r["spend"]) > 0]
+    if not rows:
+        return []
+    latest = max(date.fromisoformat(str(r["date"])) for r in rows)
+    first: dict[str, date] = {}
+    for r in rows:
+        d = date.fromisoformat(str(r["date"]))
+        first[r["ad_id"]] = min(first.get(r["ad_id"], d), d)
+    out: list[LifecycleResult] = []
+    for ad_id, f in first.items():
+        if (latest - f).days >= new_within_days:
+            continue
+        camp = next(r["campaign_id"] for r in rows if r["ad_id"] == ad_id)
+        mine = [r for r in rows if r["ad_id"] == ad_id]
+        days = {str(r["date"]) for r in mine}
+        ctrl = [
+            r for r in rows
+            if r["campaign_id"] == camp and r["ad_id"] != ad_id and str(r["date"]) in days
+            and first[r["ad_id"]] <= f - timedelta(days=min_age_of_control_days)
+        ]
+        if not ctrl:
+            continue
+        res = decide(ad_id, _totals(mine), _totals(ctrl), target_cpa=target_cpa)
+        res.evidence["ad_name"] = mine[0]["ad_name"]
+        res.evidence["days"] = len(days)
+        res.evidence["control_ads"] = len({r["ad_id"] for r in ctrl})
+        out.append(res)
+    return out
+
+
+_DEC_ICON = {Decision.STOP: "🛑", Decision.SCALE: "📈", Decision.CONTINUE: "▶️", Decision.EXTEND_TEST: "⏳"}
+
+
+def format_lifecycle(results: list[LifecycleResult]) -> str:
+    if not results:
+        return ""
+    lines = ["\n*新CR判定(通知のみ。広告設定は変更しません)*"]
+    for r in sorted(results, key=lambda r: -r.spend):
+        e = r.evidence
+        lines.append(
+            f"{_DEC_ICON[r.decision]} {r.decision.value}: {e['ad_name']}(配信{e['days']}日・費用¥{r.spend:,.0f}・登録{r.cv:.0f}件)"
+            f" — {r.reason}(比較対象: 同キャンペーンの既存{e['control_ads']}本・同じ配信日)"
+        )
+        if r.decision in (Decision.STOP, Decision.SCALE):
+            lines.append(f"  次の仮説: {r.next_hypothesis}")
+    return "\n".join(lines)
+
+
 def _yen(v: float) -> str:
     return "—" if v == float("inf") else f"¥{v:,.0f}"
 
@@ -128,7 +188,7 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     rows = json.loads(Path(args.rows).read_text(encoding="utf-8"))
     alerts, summary = detect_rows(rows, target_cpa=args.target_cpa)
-    print(format_text(args.label, alerts, summary, target_cpa=args.target_cpa))
+    print(format_text(args.label, alerts, summary, target_cpa=args.target_cpa) + format_lifecycle(judge_new_crs(rows, target_cpa=args.target_cpa)))
 
 
 if __name__ == "__main__":

@@ -73,7 +73,11 @@ def decide(
     hyp = next_hypothesis(new, control, feature_diff or {})
 
     def result(d: Decision, reason: str, p: float | None = eff.prob_better) -> LifecycleResult:
-        return LifecycleResult(ad_id, d, reason, p, new.spend, new.cv, hyp, ev)
+        h = hyp
+        if d is Decision.STOP and "横展して再現性を確認" in h:
+            # 上流が良いのに STOP は、登録に繋がっていない(件数が少なく CVR 段は断定できない)ケース
+            h = h.split("次の仮説:")[0] + "次の仮説: 上流(表示・クリック)は良いが登録に繋がっていない。CRの訴求とLPの一致を確認した版で再検証(CVは件数が少なく段の断定は不可)"
+        return LifecycleResult(ad_id, d, reason, p, new.spend, new.cv, h, ev)
 
     if spend_x < policy.early_look_spend_x:
         return result(Decision.CONTINUE, f"学習中(費用が目標CPAの{spend_x:.1f}倍)", None)
