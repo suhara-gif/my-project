@@ -13,6 +13,12 @@ accounts:
     # TWにはカスタムCV Mechanic_Lead がある。登録完了より整備士に近いので評価指標の第一候補。
     # 計測開始日以降のデータしか無いため、切り替え前に発火数を確認すること。[要確認]
     primary_conversion: "actions:offsite_conversion.fb_pixel_complete_registration"
+    # 最適化イベントが Mechanic_Lead の広告だけ、広告IDで CV 定義を上書きする(登録完了と混ぜない)。
+    # 15/16 の名前違い(テストA ― ASC_ブランド訴求15 等)は別広告の可能性があるため入れていない。[要確認]
+    # conversions に Mechanic_Lead が実際に入って返るかは実API未確認。初回は cv の値を必ず目視すること。[要確認]
+    conversion_overrides:
+      "120252539077660028": "conversions:offsite_conversion.fb_pixel_custom.Mechanic_Lead"  # TEST_ブランド訴求15_整備士
+      "120252539077320028": "conversions:offsite_conversion.fb_pixel_custom.Mechanic_Lead"  # TEST_ブランド訴求16_整備士
   - account_id: "554737564053673"
     label: CWA
     target_cpa: 8000

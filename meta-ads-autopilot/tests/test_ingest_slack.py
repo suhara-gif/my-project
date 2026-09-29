@@ -23,6 +23,22 @@ def test_to_bq_row_primary_conversion():
     assert extract_conversion(ROW, "conversions:offsite_conversion.fb_pixel_custom.Mechanic_Lead") == 1.0
 
 
+def test_conversion_override_applies_only_to_listed_ad():
+    ml = "conversions:offsite_conversion.fb_pixel_custom.Mechanic_Lead"
+    reg = "actions:offsite_conversion.fb_pixel_complete_registration"
+    overridden = to_bq_row(ROW, primary_conversion=reg, fetched_at="t", conversion_overrides={"a": ml})
+    assert (overridden["cv"], overridden["cv_definition"]) == (1.0, ml)
+    other = to_bq_row(ROW, primary_conversion=reg, fetched_at="t", conversion_overrides={"zzz": ml})
+    assert (other["cv"], other["cv_definition"]) == (2.0, reg)
+
+
+def test_account_config_normalizes_override_ad_id_to_str():
+    from meta_autopilot.config import AccountConfig
+
+    acc = AccountConfig("1", "TW", 8000, conversion_overrides={120252539077660028: "conversions:x.y"})
+    assert list(acc.conversion_overrides) == ["120252539077660028"]
+
+
 def test_bad_conversion_spec():
     with pytest.raises(ValueError):
         extract_conversion(ROW, "complete_registration")
