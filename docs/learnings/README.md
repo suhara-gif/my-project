@@ -26,3 +26,6 @@
   — 手作業で投入した日次データは、合計値に加えて列ごとの NULL 件数を数える。NULL に意味を持たせない。
 - [20260928-verify-blocker-before-reporting-it.md](20260928-verify-blocker-before-reporting-it.md)
   — 「実行できない」と報告する前に実際に1回試す。ffmpeg不在は誤りで、真の壁はネットワークポリシーだった。
+- [20260929-text-only-misses-in-image-appeal.md](20260929-text-only-misses-in-image-appeal.md)
+  — 静止画は本文だけで訴求軸を決めない。実際に見たら画像内の見出しが主訴求で、text_only の判定と食い違った。
+- [20260929-winner-definition-hides-major-dropout.md](20260929-winner-definition-hides-major-dropout.md) — 暫定目標に依存する「勝ち」定義が主力CRの停止検知を素通りさせた

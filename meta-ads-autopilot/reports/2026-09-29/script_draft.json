@@ -1,0 +1,16 @@
+{
+  "title": "TW_待遇訴求_数字冒頭_15秒案",
+  "hypothesis": "冒頭2秒で年間休日・年収の条件を出す待遇訴求は、ブランド訴求の静止画より登録CPAが低い(A1 1本の観察が根拠のため未確定)",
+  "aspect_ratio": "9:16",
+  "total_sec": 15,
+  "hook_type": "number",
+  "appeal_axis": "compensation",
+  "scenes": [
+    {"start_sec": 0, "duration_sec": 3, "visual": "整備工場を背景に整備士風の人物が正面を向く。大きな数字テロップ", "visual_tag": "mechanic-front-workshop", "on_screen_text": "年間休日120日以上", "narration": "年間休日120日以上。"},
+    {"start_sec": 3, "duration_sec": 4, "visual": "テロップを切り替え。求人サイトの画面(条件で絞り込む様子)", "visual_tag": "site-filter-screen", "on_screen_text": "年収500万円以上の求人も", "narration": "年収500万円以上の求人から選べます。"},
+    {"start_sec": 7, "duration_sec": 4, "visual": "トヨワクのロゴとサイト画面", "visual_tag": "toyowaku-logo", "on_screen_text": "トヨタディーラー専門の求人サイト", "narration": "トヨタディーラー専門の求人サイトです。"},
+    {"start_sec": 11, "duration_sec": 4, "visual": "登録ボタンの画面。無料の文字", "visual_tag": "signup-button", "on_screen_text": "登録は無料", "narration": "登録は無料です。"}
+  ],
+  "cta": "今すぐ登録",
+  "compliance_notes": "年間休日・年収は「以上」の表現。掲載求人のうち該当する求人があることの表示で、全求人の条件ではない旨を画面に小さく併記すること。掲載件数は時点で変わるため数字を出していない。人物を使う場合、実在の整備士でなければ『整備士風』の扱いと開示ラベル要否を確認[要確認]。"
+}

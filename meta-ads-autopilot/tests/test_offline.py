@@ -14,3 +14,20 @@ def test_excludes_other_definition_and_null():
     assert summary["excluded"] == ["ml", "n"]
     assert summary["last7"].cv == 1
     assert "判定から除外: ml、n" in format_text("TW", alerts, summary, target_cpa=5800)
+
+
+def test_judge_new_crs_uses_same_days_and_campaign_rest():
+    from meta_autopilot.offline import judge_new_crs
+
+    rows = []
+    for i in range(30):
+        d = f"2026-09-{i + 1:02d}" if i < 30 else ""
+        rows.append(_row(d, "old", 1 if i % 4 == 0 else 0))
+    # 新CR: 最後の6日だけ配信、費用は目標CPA×2 以上、CVなし
+    for i in range(24, 30):
+        rows.append(_row(f"2026-09-{i + 1:02d}", "new", 0, spend=5000))
+    res = judge_new_crs(rows, target_cpa=5800)
+    assert [r.ad_id for r in res] == ["new"]
+    assert res[0].evidence["days"] == 6 and res[0].evidence["control_ads"] == 1
+    # 既存(old)は新CR扱いにならない
+    assert all(r.ad_id != "old" for r in res)

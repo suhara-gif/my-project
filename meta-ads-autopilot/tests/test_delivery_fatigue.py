@@ -50,3 +50,12 @@ def test_winner_dropout():
     assert detect_winner_dropout("s", running, target_cpa=14_000) == []
     loser = AdHistory("x", "負け", F(177_000, 70_000, 420, 350, 2), F(0, 0, 0, 0, 0), [], [])
     assert detect_winner_dropout("s", loser, target_cpa=14_000) == []
+
+
+def test_major_dropout_even_if_not_winner():
+    base = F(177_000, 70_000, 420, 350, 13)  # CPA 13.6k > 目標 5.8k → 勝ちではない
+    stopped = AdHistory("m", "主力", base, F(0, 0, 0, 0, 0), [], [])
+    assert detect_winner_dropout("s", stopped, target_cpa=5_800) == []
+    a = detect_winner_dropout("s", stopped, target_cpa=5_800, baseline_spend_share=0.3)
+    assert a and a[0].kind == "major_dropout" and "主力CR" in a[0].title
+    assert detect_winner_dropout("s", stopped, target_cpa=5_800, baseline_spend_share=0.05) == []
