@@ -62,8 +62,10 @@ Mechanic_Lead を別ルートで取れるようになったときに `cv` を埋
 Meta Ads MCP でカスタムコンバージョン名(pixel custom conversion)や generic な `actions` 配列を
 指定したくなったら、まず `ads_get_field_context()`(引数なし・全件)を取って `omni_*` / `lead` 系の
 標準集計フィールドで代替できないか確認する。代替できない指標(アカウント固有のカスタムイベント)は
-このMCP単体では取得不可と判断してよく、代わりに Meta Graph API Insights を直接叩く実装
-(`meta-ads-autopilot/src/meta_autopilot/ingest/`)が必要になる。取得不可な広告には、代替指標の値を
+このMCP単体では取得不可と判断してよく、代わりに Meta Graph API Insights を直接叩く
+`meta-ads-autopilot/src/meta_autopilot/ingest/meta_insights.py`(実装済み)を使う。
+(当初このノートは「実装が別途必要」と書いたが誤り。既存コードを読まずに断言した。
+[20260929-verify-existing-code-before-claiming-missing.md](20260929-verify-existing-code-before-claiming-missing.md) 参照)取得不可な広告には、代替指標の値を
 決して代入せず、`cv_definition` のような出所列に明示的な「取得不可」マーカーを入れて NULL のまま
 残すこと。
 

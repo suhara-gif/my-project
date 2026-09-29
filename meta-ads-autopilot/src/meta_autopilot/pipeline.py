@@ -41,7 +41,12 @@ def ingest(cfg: Config, today: date | None = None) -> dict[str, int]:
     counts = {}
     for acc in cfg.accounts:
         rows = [
-            to_bq_row(r, primary_conversion=acc.primary_conversion, fetched_at=_now())
+            to_bq_row(
+                r,
+                primary_conversion=acc.primary_conversion,
+                fetched_at=_now(),
+                conversion_overrides=acc.conversion_overrides,
+            )
             for r in fetch_ad_daily(acc.account_id, since, until, access_token=cfg.meta_access_token, api_version=cfg.graph_api_version)
         ]
         counts[acc.label] = bq.upsert_ad_daily(cfg.gcp_project, cfg.bq_dataset, rows, since.isoformat(), until.isoformat(), acc.account_id)
