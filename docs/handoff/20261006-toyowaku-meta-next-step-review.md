@@ -99,3 +99,4 @@
 - 裏取り: トヨワクのSF(sourceMedium_j_tw__c、流入日 7/1以降)で fb・ig・facebook・instagram・meta・paid を含む値は `meta / cpc`(114件)だけ。9/25〜10/6 の値の一覧にも fb / paid・ig / paid は無い。→ **9/25〜10/5の「Meta由来の整備士0名」は変わらない。**
 - 10/9の判定予約(trig_011gRd6s8yTKNf3sWiTsucy1)は、Meta由来の値をすべてMetaに数えるよう書き換えた。
 - `an / paid`(Audience Network)もMeta由来。先の裏取りは `paid` を含む値をすべて見ているので、an / paid も 7/1 以降は0件。予約の定義にも an / paid を明記した。
+- `th / paid`(Threads)もMeta由来。定義は「`〜 / paid` で媒体がMeta系のもの(fb・ig・an・th など)と、meta・facebook・instagram を含む値」とした。7/1以降のトヨワクのSFには `/ paid` の値が1件も無いので、これまでの数字は変わらない。
