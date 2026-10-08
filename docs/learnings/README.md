@@ -29,3 +29,7 @@
 - [20260929-text-only-misses-in-image-appeal.md](20260929-text-only-misses-in-image-appeal.md)
   — 静止画は本文だけで訴求軸を決めない。実際に見たら画像内の見出しが主訴求で、text_only の判定と食い違った。
 - [20260929-winner-definition-hides-major-dropout.md](20260929-winner-definition-hides-major-dropout.md) — 暫定目標に依存する「勝ち」定義が主力CRの停止検知を素通りさせた
+- [20261008-empty-text-is-not-empty-document.md](20261008-empty-text-is-not-empty-document.md)
+  — PDFの本文取得が空でも文書が空とは限らない。pdffonts/Creatorでスキャン画像か確かめ、「文字データが無い」と報告する。
+- [20261008-notebooklm-autosync-needs-stable-doc.md](20261008-notebooklm-autosync-needs-stable-doc.md)
+  — NotebookLMの自動同期は登録済みドキュメントの編集にしか効かない。改定が別ファイルで来るなら固定のドキュメント1つに束ねる。
