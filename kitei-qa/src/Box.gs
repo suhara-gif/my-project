@@ -2,8 +2,8 @@
  * Box API まわり。
  *
  * 認証は Box の「クライアント資格情報許可(Client Credentials Grant)」アプリを使う。
- * アプリのサービスアカウントを規程フォルダに「ビューアー」で招待しておけば、
- * 従業員一人ひとりが Box アカウントを持っていなくても規程を読める。
+ * アプリのサービスアカウントを規程フォルダに「ビューアー」で招待するので、
+ * このスクリプトが読めるのは規程フォルダだけになる。
  */
 
 var BOX_API = 'https://api.box.com/2.0';
@@ -29,7 +29,7 @@ function getBoxToken_() {
   });
   if (res.getResponseCode() !== 200) {
     // レスポンス本文には秘密情報は含まれないが、念のためステータスだけを出す
-    throw new Error('Boxの認証に失敗しました(HTTP ' + res.getResponseCode() + ')。管理者に連絡してください。');
+    throw new Error('Boxの認証に失敗しました(HTTP ' + res.getResponseCode() + ')。');
   }
   var body = JSON.parse(res.getContentText());
   // 有効期限より少し早めに捨てる
@@ -54,7 +54,7 @@ function listCurrentRuleFiles_(folderId) {
     var res = boxGet_(BOX_API + '/folders/' + folderId + '/items' +
       '?fields=id,type,name,extension,modified_at,file_version&limit=1000&offset=' + offset);
     if (res.getResponseCode() !== 200) {
-      throw new Error('Boxの規程フォルダを読めませんでした(HTTP ' + res.getResponseCode() + ')。管理者に連絡してください。');
+      throw new Error('Boxの規程フォルダを読めませんでした(HTTP ' + res.getResponseCode() + ')。');
     }
     var body = JSON.parse(res.getContentText());
     body.entries.forEach(function (item) {
@@ -74,7 +74,8 @@ function listCurrentRuleFiles_(folderId) {
 }
 
 /**
- * ファイル本文のテキストを返す。読めない(スキャン画像PDF等)場合は空文字。
+ * ファイル本文のテキストを返す。読めない(スキャン画像PDF等)場合は空文字、
+ * Box 側のテキスト生成待ちで取れなかった場合は null。
  * キャッシュキーにバージョンIDを含めるので、Box上でファイルが更新されれば自動で読み直す。
  */
 function getFileText_(file) {
@@ -84,7 +85,7 @@ function getFileText_(file) {
 
   var text = fetchExtractedText_(file.id);
   if (text !== null) putLargeCache_(cacheKey, text);
-  return text || '';
+  return text;
 }
 
 /**

@@ -1,137 +1,126 @@
 /**
- * 社内規程Q&A
+ * 社内規程Q&A(NotebookLM連携)
  *
- * - 社内ドメインのGoogleアカウントでログインした従業員が、就業規則などの社内規程について口語で質問できる
- * - 質問のたびに Box の社内規程フォルダ「直下」のファイルを最新版として読み込む(サブフォルダ=旧版は対象外)
- *   → 規程を改定したら Box のファイルを差し替えるだけで、このアプリ側の更新作業は不要
- * - 回答は Claude API が、読み込んだ規程の記載だけを根拠に生成する
+ * Box の社内規程フォルダ「直下」のファイル(=現行版)の本文を、1つの Google ドキュメント
+ * 「社内規程_現行版(自動更新)」にまとめて書き出す。1時間ごとに Box を確認し、変更があったときだけ書き直す。
+ *
+ * NotebookLM はソースに追加した Google ドキュメントの変更を自動で取り込むので、
+ * このドキュメントを NotebookLM のソースにしておけば、規程の改定が質問の回答にも反映される。
+ * 規程は改定のたびに別ファイル(別ID)として Box に置かれるため、ファイルごとにドキュメントを
+ * 作るとソースの追加し直しが必要になる。それを避けるため、全規程を1つのドキュメントにまとめる。
  *
  * セットアップは docs/setup.md を参照。
  */
 
-var MAX_QUESTION_LENGTH = 2000; // 1回の質問の最大文字数
+var DOC_TITLE = '社内規程_現行版(自動更新)';
+var DOC_MAX_CHARS = 1000000; // Google ドキュメントの文字数上限(約102万字)より少し手前
 
-/** 質問者が選べる区分(適用される規程を絞り込むためのヒント) */
-var CATEGORIES = [
-  '指定しない',
-  '株式会社アプティ 正社員',
-  '株式会社アプティ 契約社員',
-  '株式会社アプティグローバル',
-  '派遣社員',
-];
-
-function doGet(e) {
-  var template = HtmlService.createTemplateFromFile('Index');
-  template.userEmail = Session.getActiveUser().getEmail();
-  template.categories = CATEGORIES;
-  return template.evaluate()
-    .setTitle('社内規程Q&A')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-}
-
-/**
- * 質問に回答する(クライアントから google.script.run で呼ばれる)。
- * @param {string} question 質問文
- * @param {string} category CATEGORIES のいずれか
- * @return {{answer: string, sources: Object[], unreadable: string[]}}
- */
-function ask(question, category) {
-  question = String(question || '').trim();
-  if (!question) throw new Error('質問を入力してください。');
-  if (question.length > MAX_QUESTION_LENGTH) {
-    throw new Error('質問は' + MAX_QUESTION_LENGTH + '文字以内にしてください。');
-  }
-  if (CATEGORIES.indexOf(category) === -1) category = CATEGORIES[0];
-
-  var library = loadRuleLibrary_();
-  if (library.readable.length === 0) {
-    throw new Error('規程ファイルを1件も読み込めませんでした。管理者に連絡してください。');
-  }
-
-  var answer = askClaude_(buildDocumentsText_(library), buildUserMessage_(question, category));
-
-  logQuestion_(question, category);
-
-  return {
-    answer: answer,
-    sources: library.readable.map(function (f) {
-      return { name: f.name, modifiedAt: f.modifiedAt, url: 'https://app.box.com/file/' + f.id };
-    }),
-    unreadable: library.unreadable.map(function (f) { return f.name; }),
-  };
-}
-
-/**
- * Box の規程フォルダ直下から、本文を読めたファイルと読めなかったファイルを返す。
- * 並び順はファイル名順で固定する(プロンプトキャッシュを効かせるため)。
- */
-function loadRuleLibrary_() {
+/** 時間主導トリガーから1時間ごとに呼ばれる。手動実行してもよい。 */
+function syncRules() {
   var files = listCurrentRuleFiles_(getConfig_('BOX_FOLDER_ID'));
   files.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
 
+  var signature = files.map(function (f) { return f.id + ':' + f.versionId; }).join(',');
+  var props = PropertiesService.getScriptProperties();
+  if (signature === props.getProperty('LAST_SIGNATURE')) return; // 変更なし
+
   var readable = [];
   var unreadable = [];
+  var pending = false;
   files.forEach(function (f) {
     var text = getFileText_(f);
-    if (text && text.replace(/\s/g, '').length > 0) {
+    if (text === null) {
+      pending = true; // Box 側のテキスト生成待ち。次回また試す
+      unreadable.push(f);
+    } else if (text.replace(/\s/g, '').length === 0) {
+      unreadable.push(f);
+    } else {
       f.text = text;
       readable.push(f);
-    } else {
-      unreadable.push(f);
     }
   });
-  return { readable: readable, unreadable: unreadable };
+
+  var doc = getOrCreateDoc_();
+  writeDoc_(doc, readable, unreadable);
+  // テキスト生成待ちのファイルがある間は、完了を確認できるまで毎時書き直す(通知は完了時の1回だけ)
+  if (pending) return;
+  props.setProperty('LAST_SIGNATURE', signature);
+  notifyAdmin_(doc, readable, unreadable);
 }
 
-function buildDocumentsText_(library) {
-  var parts = library.readable.map(function (f, i) {
-    return '<document index="' + (i + 1) + '">\n' +
-      '<source>' + f.name + '</source>\n' +
-      '<last_modified>' + f.modifiedAt + '</last_modified>\n' +
-      '<content>\n' + f.text + '\n</content>\n' +
-      '</document>';
-  });
-  var text = '<documents>\n' + parts.join('\n') + '\n</documents>';
-  if (library.unreadable.length > 0) {
-    text += '\n\n<unreadable_files>\n以下のファイルはフォルダにあるが本文を読み取れなかった' +
-      '(スキャン画像のPDF等)。内容は不明として扱うこと。\n' +
-      library.unreadable.map(function (f) { return '- ' + f.name; }).join('\n') +
-      '\n</unreadable_files>';
+function getOrCreateDoc_() {
+  var props = PropertiesService.getScriptProperties();
+  var docId = props.getProperty('DOC_ID');
+  if (docId) return DocumentApp.openById(docId);
+
+  var doc = DocumentApp.create(DOC_TITLE);
+  // NotebookLM は Drive の閲覧権限に従うので、社内の全員が閲覧できるようにしておく
+  DriveApp.getFileById(doc.getId()).setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+  props.setProperty('DOC_ID', doc.getId());
+  return doc;
+}
+
+function writeDoc_(doc, readable, unreadable) {
+  var total = readable.reduce(function (sum, f) { return sum + f.text.length; }, 0);
+  if (total > DOC_MAX_CHARS) {
+    throw new Error('規程の合計が' + total + '文字あり、Googleドキュメントの上限を超えます。');
   }
-  return text;
+
+  var body = doc.getBody();
+  body.clear();
+  body.appendParagraph(DOC_TITLE).setHeading(DocumentApp.ParagraphHeading.TITLE);
+  body.appendParagraph(
+    'このドキュメントは Box の社内規程フォルダから自動で作成しています。直接編集しないでください' +
+    '(次回の更新で上書きされます)。\n最終更新: ' +
+    Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm'));
+
+  if (unreadable.length > 0) {
+    body.appendParagraph('読み取れなかった規程').setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    body.appendParagraph(
+      '次の規程は Box のフォルダにありますが、文字を読み取れなかったため(スキャン画像のPDF等)、' +
+      'このドキュメントには含まれていません。これらの規程に関する質問には答えられません。\n' +
+      unreadable.map(function (f) { return '・' + f.name; }).join('\n'));
+  }
+
+  readable.forEach(function (f) {
+    body.appendParagraph(f.name.replace(/\.[^.]+$/, '')).setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    body.appendParagraph('元ファイル: ' + f.name + '(Box 最終更新 ' + f.modifiedAt.substring(0, 10) + ')');
+    body.appendParagraph(f.text);
+  });
+  doc.saveAndClose();
 }
 
-function buildUserMessage_(question, category) {
-  return '質問者の区分: ' + category + '\n\n質問:\n' + question;
+/** 書き直したときだけ、スクリプトの所有者にメールで知らせる(読めない規程に気づけるように) */
+function notifyAdmin_(doc, readable, unreadable) {
+  var lines = [
+    '社内規程ドキュメントを更新しました。',
+    doc.getUrl(),
+    '',
+    '取り込んだ規程(' + readable.length + '件):',
+  ].concat(readable.map(function (f) { return '・' + f.name; }));
+  if (unreadable.length > 0) {
+    lines = lines.concat(['', '読み取れなかった規程(' + unreadable.length + '件。文字が入ったPDFかWordに差し替えてください):'])
+      .concat(unreadable.map(function (f) { return '・' + f.name; }));
+  }
+  MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[社内規程Q&A] 規程ドキュメントを更新しました', lines.join('\n'));
 }
 
-/**
- * 質問ログ(任意)。スクリプトプロパティ LOG_SHEET_ID が設定されているときだけ記録する。
- * 退職・育休・懲戒など人に知られたくない質問もありうるため、既定では記録しない。
- */
-function logQuestion_(question, category) {
-  var sheetId = PropertiesService.getScriptProperties().getProperty('LOG_SHEET_ID');
-  if (!sheetId) return;
-  var ss = SpreadsheetApp.openById(sheetId);
-  var sheet = ss.getSheetByName('log') || ss.insertSheet('log');
-  if (sheet.getLastRow() === 0) sheet.appendRow(['日時', '区分', '質問']);
-  // 個人を特定しないため、メールアドレスは記録しない
-  sheet.appendRow([new Date(), category, question]);
+/** 1時間ごとの自動実行を設定する。最初に1回だけ手動で実行する。 */
+function setupTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'syncRules') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('syncRules').timeBased().everyHours(1).create();
+}
+
+/** 次回の syncRules で必ず書き直させる(取り込み結果を確認し直したいとき用) */
+function forceResync() {
+  PropertiesService.getScriptProperties().deleteProperty('LAST_SIGNATURE');
+  syncRules();
 }
 
 function getConfig_(key) {
   var value = PropertiesService.getScriptProperties().getProperty(key);
-  if (!value) throw new Error('スクリプトプロパティ ' + key + ' が未設定です。管理者に連絡してください。');
+  if (!value) throw new Error('スクリプトプロパティ ' + key + ' が未設定です。');
   return value;
-}
-
-/** セットアップ確認用。エディタから手動実行し、読み込めたファイル/読めなかったファイルをログに出す。 */
-function checkSetup() {
-  var library = loadRuleLibrary_();
-  library.readable.forEach(function (f) {
-    Logger.log('OK  ' + f.name + '(' + f.text.length + '文字)');
-  });
-  library.unreadable.forEach(function (f) {
-    Logger.log('NG  ' + f.name + '(本文を読み取れません。文字入りのPDFかWordに差し替えてください)');
-  });
 }
