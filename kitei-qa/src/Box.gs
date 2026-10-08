@@ -63,6 +63,7 @@ function listCurrentRuleFiles_(folderId) {
       files.push({
         id: item.id,
         name: item.name,
+        extension: String(item.extension).toLowerCase(),
         modifiedAt: item.modified_at,
         versionId: item.file_version ? item.file_version.id : item.modified_at,
       });

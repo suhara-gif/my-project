@@ -14,6 +14,8 @@
 
 var DOC_TITLE = '社内規程_現行版(自動更新)';
 var DOC_MAX_CHARS = 1000000; // Google ドキュメントの文字数上限(約102万字)より少し手前
+var RUN_BUDGET_MS = 4.5 * 60 * 1000; // GAS の1回の実行上限(6分)より手前で切り上げる
+var PENDING_ALERT_MS = 24 * 60 * 60 * 1000; // 取り込み待ちがこれ以上続いたら知らせる
 
 /** 時間主導トリガーから1時間ごとに呼ばれる。手動実行してもよい。 */
 function syncRules() {
@@ -24,15 +26,20 @@ function syncRules() {
   var props = PropertiesService.getScriptProperties();
   if (signature === props.getProperty('LAST_SIGNATURE')) return; // 変更なし
 
+  var deadline = Date.now() + RUN_BUDGET_MS;
   var readable = [];
   var unreadable = [];
-  var pending = false;
+  var pending = [];
   files.forEach(function (f) {
     var text = getFileText_(f);
+    if (text !== null && isBlank_(text) && f.extension === 'pdf') {
+      // 文字データの無いPDF(スキャン画像)は、ページ画像から文字認識する
+      text = ocrFile_(f, deadline);
+      f.ocr = true;
+    }
     if (text === null) {
-      pending = true; // Box 側のテキスト生成待ち。次回また試す
-      unreadable.push(f);
-    } else if (text.replace(/\s/g, '').length === 0) {
+      pending.push(f); // Box 側の準備中、または文字認識の途中で時間切れ。次回また試す
+    } else if (isBlank_(text)) {
       unreadable.push(f);
     } else {
       f.text = text;
@@ -40,12 +47,39 @@ function syncRules() {
     }
   });
 
+  // 取り込み待ちのファイルがある間は、ドキュメントを書き換えない。
+  // 書き換えると、改定直後の規程がまるごと抜けた状態で NotebookLM に同期されてしまうため。
+  if (pending.length > 0) {
+    alertIfPendingTooLong_(pending);
+    return;
+  }
+  props.deleteProperty('PENDING_SINCE');
+
   var doc = getOrCreateDoc_();
   writeDoc_(doc, readable, unreadable);
-  // テキスト生成待ちのファイルがある間は、完了を確認できるまで毎時書き直す(通知は完了時の1回だけ)
-  if (pending) return;
   props.setProperty('LAST_SIGNATURE', signature);
   notifyAdmin_(doc, readable, unreadable);
+}
+
+function isBlank_(text) {
+  return text.replace(/\s/g, '').length === 0;
+}
+
+/** 取り込み待ちが長く続いたら(Box の障害など)、1回だけメールで知らせる */
+function alertIfPendingTooLong_(pending) {
+  var props = PropertiesService.getScriptProperties();
+  var since = Number(props.getProperty('PENDING_SINCE'));
+  if (!since) {
+    props.setProperty('PENDING_SINCE', String(Date.now()));
+    return;
+  }
+  if (since < 0 || Date.now() - since < PENDING_ALERT_MS) return;
+  props.setProperty('PENDING_SINCE', '-1'); // 通知済み
+  MailApp.sendEmail(Session.getEffectiveUser().getEmail(),
+    '[社内規程Q&A] 規程の取り込みが24時間以上止まっています',
+    '次の規程を取り込めない状態が続いているため、ドキュメントを更新できていません。\n' +
+    pending.map(function (f) { return '・' + f.name; }).join('\n') +
+    '\n\nApps Script の「実行数」でエラー内容を確認してください。');
 }
 
 function getOrCreateDoc_() {
@@ -77,14 +111,16 @@ function writeDoc_(doc, readable, unreadable) {
   if (unreadable.length > 0) {
     body.appendParagraph('読み取れなかった規程').setHeading(DocumentApp.ParagraphHeading.HEADING1);
     body.appendParagraph(
-      '次の規程は Box のフォルダにありますが、文字を読み取れなかったため(スキャン画像のPDF等)、' +
+      '次の規程は Box のフォルダにありますが、文字を読み取れなかったため、' +
       'このドキュメントには含まれていません。これらの規程に関する質問には答えられません。\n' +
       unreadable.map(function (f) { return '・' + f.name; }).join('\n'));
   }
 
   readable.forEach(function (f) {
     body.appendParagraph(f.name.replace(/\.[^.]+$/, '')).setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    body.appendParagraph('元ファイル: ' + f.name + '(Box 最終更新 ' + f.modifiedAt.substring(0, 10) + ')');
+    body.appendParagraph('元ファイル: ' + f.name + '(Box 最終更新 ' + f.modifiedAt.substring(0, 10) + ')' +
+      (f.ocr ? '\n※スキャン画像から文字認識した本文です。数字や語句を読み間違えている可能性があるため、' +
+        '重要な点は元ファイルで確認してください。' : ''));
     body.appendParagraph(f.text);
   });
   doc.saveAndClose();
@@ -97,9 +133,9 @@ function notifyAdmin_(doc, readable, unreadable) {
     doc.getUrl(),
     '',
     '取り込んだ規程(' + readable.length + '件):',
-  ].concat(readable.map(function (f) { return '・' + f.name; }));
+  ].concat(readable.map(function (f) { return '・' + f.name + (f.ocr ? '(文字認識)' : ''); }));
   if (unreadable.length > 0) {
-    lines = lines.concat(['', '読み取れなかった規程(' + unreadable.length + '件。文字が入ったPDFかWordに差し替えてください):'])
+    lines = lines.concat(['', '読み取れなかった規程(' + unreadable.length + '件。画像が不鮮明でないか、対応していない形式でないか確認してください):'])
       .concat(unreadable.map(function (f) { return '・' + f.name; }));
   }
   MailApp.sendEmail(Session.getEffectiveUser().getEmail(), '[社内規程Q&A] 規程ドキュメントを更新しました', lines.join('\n'));
