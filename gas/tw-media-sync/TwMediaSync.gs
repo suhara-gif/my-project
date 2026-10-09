@@ -1,5 +1,5 @@
 // ==========================================================
-// TW参照元メディア／広告タイプ SF日次連携 v1.4.1（2026-10-09）
+// TW参照元メディア／広告タイプ SF日次連携 v1.4.2（2026-10-09）
 //
 // 追加先: Apps Script プロジェクト「【応募者リスト】indeed直接募集_オウンドメディア→SF 簡易自動登録」
 //         （オーナー: ahr info）の TwMediaSync.gs をこのファイル全文で置き換える。
@@ -35,6 +35,8 @@
 // 2) 参照元メディア列に日付が入っていたら例外で止める（列ずれの検知）。
 // 3) 有効IDがあるのに参照元メディアが1件も辞書に当たらない日は例外で止める。
 // 4) 会員IDが1件も読めない日（IMPORTRANGEの切断など）も例外で止める。
+// 5) SFのContact取得で途中のページがエラーでも黙って打ち切らない（twSoqlAllStrict_）。
+//    取得件数と、SF不一致になった新しいIDをログに出す。
 //    → どれも実行結果が「失敗」になり、エラー通知メールで気づける。
 // ==========================================================
 
@@ -122,6 +124,7 @@ function twSyncMediaFields() {
 
     var logRows = [];
     var updates = [];
+    var unmatchedIds = [];
 
     Object.keys(resolved).forEach(function (twId) {
       var r = resolved[twId];
@@ -129,6 +132,7 @@ function twSyncMediaFields() {
 
       if (!contacts || !contacts.length) {
         stat.noSfMatch++;
+        unmatchedIds.push(Number(twId));
         logRows.push([new Date(), twId, '', '', '', 'skip:SF側に該当Contactなし']);
         return;
       }
@@ -162,6 +166,9 @@ function twSyncMediaFields() {
           TW_CONFIG.DRY_RUN ? 'DRY:書込予定' : '']);
       });
     });
+
+    unmatchedIds.sort(function (a, b) { return b - a; });
+    Logger.log('[TW] SF不一致のうち新しいID上位10件: ' + unmatchedIds.slice(0, 10).join(', '));
 
     Logger.log('[TW] GA4行=' + stat.ga4Rows + '/有効ID=' + stat.ga4ValidId +
       ' Indeed行=' + stat.indeedRows + '/有効ID=' + stat.indeedValidId +
@@ -341,7 +348,8 @@ function twLoadSfContactsByTwId_(twIds) {
     TW_CONFIG.SF_MEDIUM_FIELD + ', ' + TW_CONFIG.SF_ADTYPE_FIELD + ', ' + TW_CONFIG.SF_STATUS_FIELD +
     ' FROM Contact WHERE ' + TW_CONFIG.SF_ID_FIELD + ' != null';
 
-  var records = omSoqlAll_(sf, soql);
+  var records = twSoqlAllStrict_(sf, soql);
+  Logger.log('[TW] SF取得件数=' + records.length + '（トヨワクIDありContactの全件のはず）');
 
   var byTwId = {};
   records.forEach(function (c) {
@@ -352,6 +360,33 @@ function twLoadSfContactsByTwId_(twIds) {
   });
 
   return byTwId;
+}
+
+
+// omSoqlAll_ と同じページング取得だが、途中のページでエラーが返ったら黙って打ち切らずに例外にする。
+// 取得件数がSF側の総件数(totalSize)と合わない場合も例外にする。
+function twSoqlAllStrict_(sf, soql) {
+  var out = [];
+  var totalSize = null;
+  var page = 0;
+  var url = sf.instance_url + '/services/data/' + TW_CONFIG.SF_API_VERSION + '/query/?q=' + encodeURIComponent(soql);
+  while (url) {
+    page++;
+    var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + sf.access_token }, muteHttpExceptions: true });
+    var code = res.getResponseCode();
+    var text = res.getContentText() || '';
+    if (code !== 200) {
+      throw new Error('SOQL取得失敗(' + page + 'ページ目, HTTP ' + code + '): ' + text.slice(0, 300));
+    }
+    var body = JSON.parse(text || '{}');
+    if (totalSize === null) totalSize = body.totalSize;
+    out = out.concat(body.records || []);
+    url = body.nextRecordsUrl ? (sf.instance_url + body.nextRecordsUrl) : '';
+  }
+  if (totalSize !== null && out.length !== totalSize) {
+    throw new Error('SOQL取得件数が合いません: 取得=' + out.length + ' / totalSize=' + totalSize + '（' + page + 'ページ）');
+  }
+  return out;
 }
 
 
