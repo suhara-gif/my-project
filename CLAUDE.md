@@ -89,6 +89,18 @@
 経緯: [docs/learnings/20260823-recurring-loop-needs-purpose-gate.md](docs/learnings/20260823-recurring-loop-needs-purpose-gate.md)、
 [docs/learnings/20260824-polling-interval-should-track-human-cadence.md](docs/learnings/20260824-polling-interval-should-track-human-cadence.md)
 
+## 母艦(Mac)作業を利用者に依頼するときのルール
+
+利用者に端末操作を頼む前に、次の3点を確認する。満たさないなら依頼を出さず、先に仕組みを作る。
+1. **結果は Slack かファイルで私が読める**形にする(`--slack` 等)。出力の貼り付けを依頼しない。
+   貼り付けた出力がシェルにコマンドとして実行される事故もある。
+2. **依頼は1回・1コマンド**。最新版の取り込み(`git fetch/merge`)などの前提を、コマンド自身が内包する
+   (`.command` は ff-only の自己更新を持つ)。複数コマンドを小出しにしない。
+3. **自動ジョブ・インストーラは、設計前に実機の前提を読み取り専用プローブで測り**、結果を Slack に出す
+   (常駐プロセス・PATH・取り込み状況など。公式ドキュメントだけを根拠にしない)。
+- google-ads-mcp の番号付き `.command`(6〜9)は `command_lint.py` を通す。
+経緯: [docs/learnings/20261009-one-shot-command-no-paste-loop.md](docs/learnings/20261009-one-shot-command-no-paste-loop.md)
+
 ## 計画・設計
 
 ### 計画時の盲点チェック
@@ -100,6 +112,8 @@
 観察したことを**推奨アクション・断定・数値**として書く直前にも必ず以下を実行する:
 「この観察が成り立つために必要な前提を箇条書きにし、各前提へ『確認済み / 未確認』を付す。
 未確認が1つでも残るなら、推奨アクションにせず `[要確認]` に留める」
+
+チャットの返答内の小さな提案・コマンド案内にも同じチェックを適用する。
 
 未確認の観察を `[要確認]` に置くのはコスト0。**推奨アクションに昇格させた瞬間にコストが発生する。**
 移行・置換の提案では、移行先のコスト(単価・制約)を必ず1つ確認してから書く。

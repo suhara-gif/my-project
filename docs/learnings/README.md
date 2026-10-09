@@ -16,3 +16,5 @@
   — 不在証拠（Xが無い）から因果を語る前に「正常時にXは有ったか」を確認する対照試験を1本入れる。
 - [20260817-promote-only-after-listing-assumptions.md](20260817-promote-only-after-listing-assumptions.md)
   — 観察を推奨アクション・断定・数値へ昇格させる前に、依存する前提を列挙し確認済みかを付す。
+- [20261009-one-shot-command-no-paste-loop.md](20261009-one-shot-command-no-paste-loop.md)
+  — 母艦作業は「1回・1コマンド・結果はSlack」に固定し、小出しの確認コマンドと貼り付け往復を作らない。
