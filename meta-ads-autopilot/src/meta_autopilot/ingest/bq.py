@@ -6,15 +6,48 @@ google-cloud-bigquery は重いので、この関数を呼ぶときだけ import
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
+SA_ENV = "BQ_SERVICE_ACCOUNT_JSON"
+_SA_KEYS = ("type", "project_id", "private_key", "client_email", "token_uri")
+
 SQL_DIR = Path(__file__).resolve().parents[3] / "sql"
+
+
+def service_account_info(env: dict | None = None) -> dict | None:
+    """環境変数 BQ_SERVICE_ACCOUNT_JSON(サービスアカウント鍵のJSON本文)を検証して返す。無ければ None。
+
+    コネクタ(OAuth)は期限切れで外れるが、サービスアカウントは外れない。鍵の中身はエラー文にも出さない。
+    """
+    raw = (env if env is not None else os.environ).get(SA_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        info = json.loads(raw)
+    except ValueError:
+        raise ValueError(f"{SA_ENV} が JSON として読めません(鍵ファイルの中身をそのまま貼る)") from None
+    if not isinstance(info, dict) or info.get("type") != "service_account":
+        raise ValueError(f"{SA_ENV} がサービスアカウント鍵ではありません(type=service_account が必要)")
+    missing = [k for k in _SA_KEYS if not info.get(k)]
+    if missing:
+        raise ValueError(f"{SA_ENV} に必須キーがありません: {', '.join(missing)}")
+    return info
 
 
 def client(project: str):
     from google.cloud import bigquery
 
-    return bigquery.Client(project=project)
+    info = service_account_info()
+    if info is None:
+        return bigquery.Client(project=project)  # 従来どおり ADC
+    from google.oauth2 import service_account
+
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=["https://www.googleapis.com/auth/bigquery"]
+    )
+    return bigquery.Client(project=project, credentials=creds)
 
 
 def apply_sql_file(project: str, dataset: str, filename: str) -> None:
