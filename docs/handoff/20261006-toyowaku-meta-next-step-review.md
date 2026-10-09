@@ -239,3 +239,16 @@
 - 残作業: 広告タイプの誤記入の掃除 → `gas/tw-media-sync/TwAdTypeCleanup.gs`(DRY_RUN→退避→消去→再同期)。
 - 掃除完了(10/9 18:54〜18:59): 誤記入1,540件を消去(控え `_adtype_backup`)→ 再同期で11件に正しい広告タイプが入った。現在の `media_ad_type_tw__c` は SEARCH 1,998 / PERFORMANCE_MAX 1,262 / DEMAND_GEN 76 / DISPLAY 5 / 空欄 2,963 で、Googleのキャンペーンタイプ以外の値は0件。
 - 残: Notion の TwMediaSync 正本ページ(v1.2のまま)への v1.4.2 反映、CW/MW の流入元停止(9/23〜)の原因調査。
+
+## 2026-10-09 夜: カーワク(CW)・メカワク(MW)の参照元メディア空欄
+
+- 症状: SFの sourceMedium_j_cw__c は流入日9/23以降ほぼ0件（9/24〜10/9 約300件空欄）。MWも9/24以降0件（約70件）。
+- GA4取得上限説は外れ: SS_GA4連携 cw_会員id は Found=Returned=10,947、10/9分まで取得済み。
+- 原因① CW列ずれ（確定）: CwMediaSync v2.0 が「流入後突合cw」O列を参照元メディアとして固定読み。
+  現在の見出しは O=流入日 / P=参照元メディア / Q=type / R=流入日時点年齢。
+  cwTestDictionaryCoverage の実行結果は全ラベルが日付（Thu Apr 04 2024 … ⚠️辞書未収録）。
+- 原因② 日次実行が9/24以降記録なし（未確定）: CW/MW両方のログSS `_*_media_log_summary` の最終行が
+  9/24 10:20 JST。9/24 14:20〜14:58 JSTにバックフィル（CW 7,212件・MW 1,504件 成功）後、日次の記録が無い。
+  MWのシートは列数が9/20と同じ（A:S）なので①だけでは説明できない。トリガー消失か実行時エラーか[要確認]。
+- 対応: gas/cw-mw-media-sync/ に CwMediaSync v2.1 / MwMediaSync v2.1。参照元メディア列を見出し名で探し、
+  列ずれ・ID0件・辞書全滅・SOQL失敗/件数不一致ではエラー停止（TW v1.4.2と同方式）。
