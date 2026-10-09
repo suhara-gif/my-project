@@ -12,5 +12,25 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "ask": [
+      "mcp__Meta_Ads__ads_update_entity",
+      "mcp__Meta_Ads__ads_activate_entity"
+    ],
+    "deny": [
+      "mcp__Gmail__send_message",
+      "mcp__Gmail__reply",
+      "mcp__Gmail__forward",
+      "mcp__Meta_Ads__ads_create_campaign",
+      "mcp__Meta_Ads__ads_create_ad_set",
+      "mcp__Meta_Ads__ads_create_ad",
+      "mcp__Meta_Ads__ads_boost_ig_post",
+      "mcp__Meta_Ads__ads_experiment_abtest_create_test",
+      "mcp__Meta_Ads__ads_experiment_abtest_update_test",
+      "mcp__Meta_Ads__ads_experiment_lift_create_test",
+      "mcp__Meta_Ads__ads_creative_delete",
+      "mcp__Meta_Ads__ads_delete_custom_audience"
+    ]
   }
 }
