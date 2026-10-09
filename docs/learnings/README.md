@@ -29,3 +29,5 @@
 - [20260929-text-only-misses-in-image-appeal.md](20260929-text-only-misses-in-image-appeal.md)
   — 静止画は本文だけで訴求軸を決めない。実際に見たら画像内の見出しが主訴求で、text_only の判定と食い違った。
 - [20260929-winner-definition-hides-major-dropout.md](20260929-winner-definition-hides-major-dropout.md) — 暫定目標に依存する「勝ち」定義が主力CRの停止検知を素通りさせた
+- [20261009-restrict-tools-after-mapping-existing-users.md](20261009-restrict-tools-after-mapping-existing-users.md)
+  — ツールを deny/ask にする前に、既存運用の利用箇所と、MCP以外の同等の書き込み経路を洗い出す。
