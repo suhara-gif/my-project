@@ -1,5 +1,5 @@
 // ==========================================================
-// TW参照元メディア／広告タイプ SF日次連携 v1.4（2026-10-09）
+// TW参照元メディア／広告タイプ SF日次連携 v1.4.1（2026-10-09）
 //
 // 追加先: Apps Script プロジェクト「【応募者リスト】indeed直接募集_オウンドメディア→SF 簡易自動登録」
 //         （オーナー: ahr info）の TwMediaSync.gs をこのファイル全文で置き換える。
@@ -30,9 +30,11 @@
 // 固定指定がずれた。O列に日付が入って参照元メディアが全件「辞書未収録」でスキップ、
 // P列（実は参照元メディア）が広告タイプとして約1,540件書き込まれた。実行結果は毎日「完了」だった。
 // 今後も列は足すため、次のように変更した。
-// 1) 列は文字ではなく1行目の見出し名で探す（GA4_HEADERS）。見つからなければ例外で止める。
+// 1) 手で足していく列（参照元メディア／type）は1行目の見出し名で探す（GA4_HEADERS）。
+//    見つからなければ例外で止める。A〜E列（IMPORTRANGEで取り込むGA4レポート）は従来どおり文字で固定。
 // 2) 参照元メディア列に日付が入っていたら例外で止める（列ずれの検知）。
 // 3) 有効IDがあるのに参照元メディアが1件も辞書に当たらない日は例外で止める。
+// 4) 会員IDが1件も読めない日（IMPORTRANGEの切断など）も例外で止める。
 //    → どれも実行結果が「失敗」になり、エラー通知メールで気づける。
 // ==========================================================
 
@@ -43,12 +45,13 @@ var TW_CONFIG = {
 
   GA4_SHEET_ID: '1hf0NeZIlB_1RvMut1it1bfDk9HZBv9N0EM-m19KaRZ4',
   GA4_SHEET_NAME: '流入後突合tw',
-  // 見出し名の候補（上から順に探す）。シートの見出しを変えたらここに足す。
+  // A〜E列は A1 の IMPORTRANGE("tw_会員id!a:e") でGA4レポートをそのまま取り込んだ範囲。
+  // 1行目に見出しが無く、レポートの形も変わらないので文字で固定する（A=date / B=会員ID）。
+  GA4_COL: { id: 'B', date: 'A' },
+  // F列より右は手で足していく列。1行目の見出し名で探す（上から順に候補を試す）。
   GA4_HEADERS: {
-    id: ['tw会員ID', '会員ID', 'ユーザーID'],
     medium: ['参照元メディア'],
     adType: ['type', '広告タイプ'],
-    date: ['日付'],
   },
 
   INDEED_SHEET_ID: '1OfSiE6lRjYB1nsKNLVUV3DPDgQlgQPufBgrowwuJuR8',
@@ -209,10 +212,10 @@ function twLoadGa4Map_(stat) {
   if (values.length < 2) return {};
 
   var header = values[0];
-  var idCol = twFindCol_(header, TW_CONFIG.GA4_HEADERS.id, 'id');
+  var idCol = twColLetterToIndex_(TW_CONFIG.GA4_COL.id);
+  var dateCol = twColLetterToIndex_(TW_CONFIG.GA4_COL.date);
   var mediumCol = twFindCol_(header, TW_CONFIG.GA4_HEADERS.medium, 'medium');
   var adTypeCol = twFindCol_(header, TW_CONFIG.GA4_HEADERS.adType, 'adType');
-  var dateCol = twFindCol_(header, TW_CONFIG.GA4_HEADERS.date, 'date');
   Logger.log('[TW] 列位置: id=' + (idCol + 1) + ' medium=' + (mediumCol + 1) +
     ' adType=' + (adTypeCol + 1) + ' date=' + (dateCol + 1) + '（1始まり）');
 
@@ -241,6 +244,9 @@ function twLoadGa4Map_(stat) {
     }
   }
 
+  if (!stat.ga4ValidId) {
+    throw new Error('流入後突合tw のB列から会員IDが1件も読めません。A1のIMPORTRANGEが切れていないか確認してください。');
+  }
   return map;
 }
 
