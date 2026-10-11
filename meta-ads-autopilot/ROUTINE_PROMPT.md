@@ -30,6 +30,13 @@ claude.ai のルーティン作成画面で次のように設定し、下の「�
 6. 未解析の新CRを解析する(1日3本まで)。`SELECT ad_id FROM raw_ad_daily WHERE ad_id NOT IN (SELECT ad_id FROM creative_features)` で見つかった広告について、ads_get_ad_entities の creative_id → ads_get_creatives の image_url を curl で取得し、Read で画像を見て creative_features に INSERT する(analysis_scope='multimodal'、語彙は creative/schema.py に従う、1080x1080などの実測値は notes に書く)。動画は download_hd_url が null で映像に到達できないため、本文から確定できる項目だけを analysis_scope='text_only' で入れる。画像が取れない/見えないときは text_only で入れ、Slack に「画像未取得: 広告名」と1行足す。[要確認] Routine の実行環境で画像取得と目視ができるかは未検証(できない場合はこの手順を飛ばしてよい)。
 7. 本文の *太字* を **太字** に変換し、Slack の自分宛てDM(slack_send_message の channel_id に自分の user_id)へ送る。
 
+BigQueryが使えない場合(未認証・エラー)のフォールバック
+- 手順2・3・6は飛ばし、その旨をSlack本文の冒頭に1行で書く(「BigQuery未接続のためMeta直取得で判定」)。
+- 手順1と同じ fields・time_increment="1" で、昨日までの直近35日の広告×日を Meta Ads MCP から取得する(ページングは最後まで追う)。
+- 取得結果を手順3と同じ列(date, campaign_id, campaign_name, ad_id, ad_name, spend, impressions, link_clicks, lpv, cv, cv_definition, frequency)の rows.json に整形する。cv の扱い(欠損は0、Mechanic_Lead 最適化の広告は cv=NULL)は手順2と同じ。
+- 以降は手順4・5・7を通常どおり実行する。Meta側の取得も失敗した場合だけ、止まった場所を1行でDMする。
+- 注意: この経路では履歴がBigQueryに溜まらない。復旧後の通常実行で直近7日が入れ直されるが、それ以前の欠けは埋まらない。
+
 注意
 - 本文の数字・通知内容は手を加えず、スクリプトの出力をそのまま使う(要約で数字を変えない)。
 - いずれかのコネクタが使えない場合は、使える範囲で進め、どこで止まったかをSlack DMに1行で書く。
