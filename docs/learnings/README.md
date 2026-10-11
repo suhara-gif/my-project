@@ -18,3 +18,5 @@
   — 観察を推奨アクション・断定・数値へ昇格させる前に、依存する前提を列挙し確認済みかを付す。
 - [20261009-one-shot-command-no-paste-loop.md](20261009-one-shot-command-no-paste-loop.md)
   — 母艦作業は「1回・1コマンド・結果はSlack」に固定し、小出しの確認コマンドと貼り付け往復を作らない。
+- [20261011-oauth-connector-expires-daily-scheduled-runs.md](20261011-oauth-connector-expires-daily-scheduled-runs.md)
+  — ユーザーOAuthのコネクタは約1日で切れる前提で、定期実行の書き込み経路を設計する(成功時刻の分布で裏取り)。
