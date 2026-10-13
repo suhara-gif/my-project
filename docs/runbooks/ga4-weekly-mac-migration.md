@@ -1,6 +1,11 @@
 # GA4 週次レポートを母艦(サービスアカウント)へ移す 設計
 
-状態: 設計のみ(実装は承認待ち) / 作成: 2026-10-13
+状態: **実装済み(別セッション、2026-10-12)。本書は検証メモ** / 作成: 2026-10-13
+
+> 訂正(2026-10-13): 母艦版 `weekly_ga4_report.py`(BQ + keyEvents は Data API、SA鍵、launchd 月曜)は既に稼働済みで、
+> 10/12 13:30 に5サイトとも成功していた(`weekly_ga4_report_last.json`)。下の設計・突合は重複作業だったが、
+> 突合で「レポートの AU は distinct user_pseudo_id で、GA4画面の activeUsers と 1〜2%ずれる」ことが分かった(下表)。
+> keyEvents の Data API が SA で通っているため、SA は5プロパティに登録済み(8月の403は解消)。
 
 ## 結論
 - 母艦のサービスアカウントは、5サイトすべての `analytics_*.events_*` を読めた(2026-10-13 母艦実測、Slack投稿 OK)。
@@ -40,3 +45,8 @@ activeUsers を BQ で再現する条件(engagement_time_msec>0 など)、U-matc
 
 ## 承認が要ること
 - 方式: BQ(定義差あり・追加操作なし) か API(画面一致・管理者操作5件) か。
+
+## 突合の追加結果(23_, session_start 方式)
+- sessions: session_start 件数で トヨワク ±0 / カーワク +0.5% / メカワク +1.5% / アプキャリ -0.5%(現行は distinct(user+ga_session_id) で +0.2〜+1.3%)。
+- activeUsers を engagement_time_msec>0 で数える案は -9〜-44% で不採用。
+- 結論: BQ の AU は totalUsers 相当。画面の activeUsers に合わせるなら Data API を使う(SA は既に通る)。
