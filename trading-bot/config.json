@@ -1,0 +1,11 @@
+{
+  "symbols": ["DEMO_TECH1", "DEMO_TECH2", "DEMO_SEMI", "DEMO_RETAIL", "DEMO_ENERGY"],
+  "fast_period": 20,
+  "slow_period": 50,
+  "position_fraction": 0.10,
+  "take_profit_pct": 0.15,
+  "stop_loss_pct": 0.07,
+  "daily_loss_limit_pct": 0.03,
+  "slippage_pct": 0.0005,
+  "commission_pct": 0.0
+}
