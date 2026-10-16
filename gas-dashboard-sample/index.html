@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f7f7f8;
+      color: #1a1a1a;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 16px;
+    }
+    .filters {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      background: #fff;
+      border: 1px solid #e2e2e5;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    .filters label {
+      font-size: 13px;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .filters input[type="date"] {
+      font-size: 13px;
+    }
+    .channel-checks {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e2e5;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .card .label {
+      font-size: 12px;
+      color: #777;
+    }
+    .card .value {
+      font-size: 20px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    .chart-box {
+      background: #fff;
+      border: 1px solid #e2e2e5;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .chart-box h2 {
+      font-size: 14px;
+      margin: 0 0 12px;
+      color: #333;
+    }
+    .empty {
+      color: #999;
+      font-size: 13px;
+      padding: 40px 0;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>売上ダッシュボード（サンプル）</h1>
+
+  <div class="filters">
+    <label>期間:
+      <input type="date" id="dateFrom">
+      〜
+      <input type="date" id="dateTo">
+    </label>
+    <div class="channel-checks" id="channelChecks"></div>
+  </div>
+
+  <div class="cards" id="summaryCards"></div>
+
+  <div class="chart-box">
+    <h2>日別推移</h2>
+    <canvas id="trendChart" height="90"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <h2>チャネル別合計</h2>
+    <canvas id="channelChart" height="90"></canvas>
+  </div>
+
+  <div id="emptyState" class="empty" style="display:none;">
+    データがありません。スプレッドシート側で「ダッシュボード」メニューから
+    「サンプルデータを投入」を実行してください。
+  </div>
+
+  <script>
+    let rawData = [];
+    let trendChart = null;
+    let channelChart = null;
+
+    google.script.run.withSuccessHandler(onDataLoaded).getDashboardData();
+
+    function onDataLoaded(data) {
+      rawData = data || [];
+      if (rawData.length === 0) {
+        document.getElementById('emptyState').style.display = 'block';
+        return;
+      }
+
+      const dates = rawData.map(function (d) { return d.date; }).sort();
+      document.getElementById('dateFrom').value = dates[0];
+      document.getElementById('dateTo').value = dates[dates.length - 1];
+
+      const channels = Array.from(new Set(rawData.map(function (d) { return d.channel; }))).sort();
+      const checksEl = document.getElementById('channelChecks');
+      channels.forEach(function (ch) {
+        const id = 'ch_' + ch;
+        const label = document.createElement('label');
+        label.innerHTML =
+          '<input type="checkbox" id="' + id + '" value="' + ch + '" checked> ' + ch;
+        checksEl.appendChild(label);
+      });
+
+      document.querySelectorAll('.channel-checks input, #dateFrom, #dateTo')
+        .forEach(function (el) {
+          el.addEventListener('change', render);
+        });
+
+      render();
+    }
+
+    function getFiltered() {
+      const from = document.getElementById('dateFrom').value;
+      const to = document.getElementById('dateTo').value;
+      const checked = Array.from(
+        document.querySelectorAll('.channel-checks input:checked')
+      ).map(function (el) { return el.value; });
+
+      return rawData.filter(function (d) {
+        const inRange = (!from || d.date >= from) && (!to || d.date <= to);
+        return inRange && checked.indexOf(d.channel) !== -1;
+      });
+    }
+
+    function render() {
+      const filtered = getFiltered();
+      renderSummary(filtered);
+      renderTrendChart(filtered);
+      renderChannelChart(filtered);
+    }
+
+    function renderSummary(data) {
+      const total = data.reduce(function (sum, d) { return sum + d.amount; }, 0);
+      const count = data.length;
+      const avg = count ? Math.round(total / count) : 0;
+
+      const cards = [
+        { label: '合計金額', value: '¥' + total.toLocaleString() },
+        { label: '件数', value: count.toLocaleString() },
+        { label: '平均単価', value: '¥' + avg.toLocaleString() },
+      ];
+
+      document.getElementById('summaryCards').innerHTML = cards
+        .map(function (c) {
+          return '<div class="card"><div class="label">' + c.label +
+            '</div><div class="value">' + c.value + '</div></div>';
+        })
+        .join('');
+    }
+
+    function renderTrendChart(data) {
+      const byDate = {};
+      data.forEach(function (d) {
+        byDate[d.date] = (byDate[d.date] || 0) + d.amount;
+      });
+      const labels = Object.keys(byDate).sort();
+      const values = labels.map(function (l) { return byDate[l]; });
+
+      const ctx = document.getElementById('trendChart');
+      if (trendChart) trendChart.destroy();
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '金額',
+            data: values,
+            borderColor: '#4f6df5',
+            backgroundColor: 'rgba(79, 109, 245, 0.1)',
+            fill: true,
+            tension: 0.2,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    }
+
+    function renderChannelChart(data) {
+      const byChannel = {};
+      data.forEach(function (d) {
+        byChannel[d.channel] = (byChannel[d.channel] || 0) + d.amount;
+      });
+      const labels = Object.keys(byChannel);
+      const values = labels.map(function (l) { return byChannel[l]; });
+
+      const ctx = document.getElementById('channelChart');
+      if (channelChart) channelChart.destroy();
+      channelChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '金額',
+            data: values,
+            backgroundColor: '#4f6df5',
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } },
+        },
+      });
+    }
+  </script>
+</body>
+</html>
