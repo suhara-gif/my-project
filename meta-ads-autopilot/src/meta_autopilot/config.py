@@ -17,6 +17,13 @@ class AccountConfig:
     # CV とみなす action。"actions:" または "conversions:" の接頭辞でどちらのリストかを指定する。
     # 例: conversions:offsite_conversion.fb_pixel_custom.Mechanic_Lead
     primary_conversion: str = "actions:offsite_conversion.fb_pixel_complete_registration"
+    # 広告ID → CV指定。最適化イベントが違う広告(Mechanic_Lead運用のテスト広告など)だけ上書きする。
+    # 広告名は表記ゆれがあるため、名前ではなく広告IDで指定する。
+    conversion_overrides: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # YAMLの数値キーは int になるため、広告IDは文字列に揃える
+        self.conversion_overrides = {str(k): v for k, v in self.conversion_overrides.items()}
 
 
 @dataclass

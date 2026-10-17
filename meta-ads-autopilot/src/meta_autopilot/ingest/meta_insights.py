@@ -109,8 +109,19 @@ def extract_conversion(row: dict, spec: str) -> float:
     return _action_value(row.get(source), action_type)
 
 
-def to_bq_row(row: dict, *, primary_conversion: str, fetched_at: str) -> dict:
-    """API の1行を raw_ad_daily の1行に変換する。"""
+def to_bq_row(
+    row: dict,
+    *,
+    primary_conversion: str,
+    fetched_at: str,
+    conversion_overrides: dict[str, str] | None = None,
+) -> dict:
+    """API の1行を raw_ad_daily の1行に変換する。
+
+    conversion_overrides に広告IDがあれば、その広告だけ別のCV定義で数える。
+    採用した定義は cv_definition に残るので、定義の違う広告を混ぜて集計しないこと。
+    """
+    primary_conversion = (conversion_overrides or {}).get(str(row["ad_id"]), primary_conversion)
     return {
         "date": row["date_start"],
         "account_id": row["account_id"],
